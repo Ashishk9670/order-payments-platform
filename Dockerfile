@@ -16,7 +16,7 @@ FROM eclipse-temurin:21-jre
 ARG MODULE
 WORKDIR /app
 RUN useradd --system --uid 10001 app
-COPY --from=build /src/${MODULE}/target/${MODULE}-*-SNAPSHOT.jar app.jar
+COPY --from=build /src/${MODULE}/target/${MODULE}-*-exec.jar app.jar
 USER app
 ENV JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=75"
 ENTRYPOINT ["java", "-jar", "app.jar"]

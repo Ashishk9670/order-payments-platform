@@ -50,6 +50,11 @@
                     <groupId>org.springframework.boot</groupId>
                     <artifactId>spring-boot-maven-plugin</artifactId>
                     <version>${spring-boot.version}</version>
+                    <configuration>
+                        <!-- keep the plain jar as the main artifact so failsafe sees target/classes layout;
+                             the runnable fat jar is <module>-<version>-exec.jar -->
+                        <classifier>exec</classifier>
+                    </configuration>
                     <executions>
                         <execution>
                             <goals><goal>repackage</goal></goals>
