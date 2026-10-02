@@ -1,0 +1,122 @@
+package com.example.shop.order.domain;
+
+import jakarta.persistence.CascadeType;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.Id;
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.Table;
+import jakarta.persistence.Version;
+import java.math.BigDecimal;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+
+/** Aggregate root. State transitions are guarded so duplicate or late saga events cannot corrupt the state. */
+@Entity
+@Table(name = "orders")
+public class Order {
+
+    @Id
+    private UUID id;
+    @Column(name = "customer_id", nullable = false)
+    private String customerId;
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private OrderStatus status;
+    @Column(name = "total_amount", nullable = false)
+    private BigDecimal totalAmount;
+    @Column(name = "cancel_reason")
+    private String cancelReason;
+    @Column(name = "created_at", nullable = false)
+    private Instant createdAt;
+    @Column(name = "updated_at", nullable = false)
+    private Instant updatedAt;
+    @Version
+    private long version;
+    @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<OrderItem> items = new ArrayList<>();
+
+    protected Order() {
+    }
+
+    public static Order create(String customerId, List<ItemSpec> specs) {
+        Order o = new Order();
+        o.id = UUID.randomUUID();
+        o.customerId = customerId;
+        o.status = OrderStatus.PENDING;
+        o.createdAt = o.updatedAt = Instant.now();
+        BigDecimal total = BigDecimal.ZERO;
+        for (ItemSpec s : specs) {
+            o.items.add(new OrderItem(o, s.sku(), s.quantity(), s.unitPrice()));
+            total = total.add(s.unitPrice().multiply(BigDecimal.valueOf(s.quantity())));
+        }
+        o.totalAmount = total;
+        return o;
+    }
+
+    public record ItemSpec(String sku, int quantity, BigDecimal unitPrice) {
+    }
+
+    /** @return true if the state changed (false = duplicate / out-of-order event, ignore). */
+    public boolean markInventoryReserved() {
+        if (status != OrderStatus.PENDING) {
+            return false;
+        }
+        transition(OrderStatus.INVENTORY_RESERVED);
+        return true;
+    }
+
+    public boolean confirm() {
+        if (status != OrderStatus.INVENTORY_RESERVED) {
+            return false;
+        }
+        transition(OrderStatus.CONFIRMED);
+        return true;
+    }
+
+    public boolean cancel(String reason) {
+        if (status == OrderStatus.CONFIRMED || status == OrderStatus.CANCELLED) {
+            return false;
+        }
+        this.cancelReason = reason;
+        transition(OrderStatus.CANCELLED);
+        return true;
+    }
+
+    private void transition(OrderStatus next) {
+        this.status = next;
+        this.updatedAt = Instant.now();
+    }
+
+    public UUID getId() {
+        return id;
+    }
+
+    public String getCustomerId() {
+        return customerId;
+    }
+
+    public OrderStatus getStatus() {
+        return status;
+    }
+
+    public BigDecimal getTotalAmount() {
+        return totalAmount;
+    }
+
+    public String getCancelReason() {
+        return cancelReason;
+    }
+
+    public Instant getCreatedAt() {
+        return createdAt;
+    }
+
+    public List<OrderItem> getItems() {
+        return items;
+    }
+}

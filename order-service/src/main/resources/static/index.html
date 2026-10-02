@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Order Platform</title>
+  <style>
+    :root { --bg:#f6f7f9; --card:#fff; --ink:#1b1f24; --muted:#667085; --line:#e4e7ec; --accent:#2563eb;
+            --ok:#067647; --okbg:#ecfdf3; --bad:#b42318; --badbg:#fef3f2; --wait:#93370d; --waitbg:#fffaeb; }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg:#0f1115; --card:#171a21; --ink:#e8eaed; --muted:#98a2b3; --line:#2a2f3a; --accent:#6b9bff;
+              --ok:#6ce9a6; --okbg:#0b2e1f; --bad:#fda29b; --badbg:#3a1410; --wait:#fec84b; --waitbg:#3a2a07; } }
+    * { box-sizing:border-box; }
+    body { margin:0; font:15px/1.5 system-ui,-apple-system,Segoe UI,sans-serif; background:var(--bg); color:var(--ink); }
+    main { max-width:880px; margin:0 auto; padding:24px 16px 64px; display:grid; gap:20px; }
+    h1 { font-size:22px; margin:0; } h2 { font-size:16px; margin:0 0 12px; }
+    .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:20px; }
+    label { display:block; font-size:13px; color:var(--muted); margin-bottom:4px; }
+    input, select { width:100%; padding:9px 10px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--ink); font:inherit; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; }
+    .row { display:flex; gap:8px; flex-wrap:wrap; margin-top:14px; }
+    button { padding:9px 14px; border-radius:8px; border:1px solid var(--line); background:var(--card); color:var(--ink); font:inherit; cursor:pointer; }
+    button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+    button:disabled { opacity:.5; cursor:not-allowed; }
+    .badge { display:inline-block; padding:2px 10px; border-radius:999px; font-size:12px; font-weight:600; }
+    .PENDING, .INVENTORY_RESERVED { background:var(--waitbg); color:var(--wait); }
+    .CONFIRMED { background:var(--okbg); color:var(--ok); }
+    .CANCELLED { background:var(--badbg); color:var(--bad); }
+    table { width:100%; border-collapse:collapse; font-size:14px; } th,td { text-align:left; padding:8px 6px; border-bottom:1px solid var(--line); }
+    th { color:var(--muted); font-weight:500; } code { font-size:12px; color:var(--muted); }
+    .error { color:var(--bad); margin-top:10px; } .muted { color:var(--muted); }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Order Platform</h1>
+
+  <section class="card" aria-labelledby="place-h">
+    <h2 id="place-h">Place an order</h2>
+    <form id="order-form" novalidate>
+      <div class="grid">
+        <div><label for="customerId">Customer ID</label><input id="customerId" name="customerId" value="demo-customer" data-testid="customer-id"></div>
+        <div><label for="sku">Product</label>
+          <select id="sku" name="sku" data-testid="sku">
+            <option value="SKU-1001">SKU-1001 (stock 100)</option>
+            <option value="SKU-1002">SKU-1002 (stock 50)</option>
+            <option value="SKU-1003">SKU-1003 (stock 5)</option>
+            <option value="SKU-UNKNOWN">SKU-UNKNOWN (not stocked)</option>
+          </select></div>
+        <div><label for="quantity">Quantity</label><input id="quantity" name="quantity" type="number" min="1" value="1" data-testid="quantity"></div>
+        <div><label for="unitPrice">Unit price</label><input id="unitPrice" name="unitPrice" type="number" step="0.01" value="19.99" data-testid="unit-price"></div>
+      </div>
+      <div class="row">
+        <button class="primary" type="submit" id="submit" data-testid="place-order">Place order</button>
+        <button type="button" id="preset-decline" data-testid="preset-decline" title="Total above the simulated card limit of 10000">Preset: payment will be declined</button>
+      </div>
+      <div id="form-error" class="error" role="alert" data-testid="form-error" hidden></div>
+    </form>
+  </section>
+
+  <section class="card" id="result-card" aria-live="polite" hidden>
+    <h2>Latest order</h2>
+    <p>
+      <span id="result-status" class="badge" data-testid="order-status"></span>
+      <code id="result-id" data-testid="order-id"></code>
+    </p>
+    <p id="result-total" class="muted" data-testid="order-total"></p>
+    <p id="result-reason" class="error" data-testid="order-reason" hidden></p>
+  </section>
+
+  <section class="card" aria-labelledby="history-h">
+    <h2 id="history-h">Order history <span class="muted">(GraphQL)</span></h2>
+    <div class="row" style="margin-top:0;margin-bottom:12px">
+      <button type="button" id="refresh" data-testid="refresh-history">Refresh</button>
+    </div>
+    <table>
+      <thead><tr><th>Order</th><th>Status</th><th>Items</th><th>Total</th></tr></thead>
+      <tbody id="history" data-testid="history"></tbody>
+    </table>
+    <p id="history-empty" class="muted" data-testid="history-empty" hidden>No orders yet for this customer.</p>
+  </section>
+</main>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  const TERMINAL = new Set(['CONFIRMED', 'CANCELLED']);
+  let pollTimer = null;
+
+  function showOrder(o) {
+    $('result-card').hidden = false;
+    $('result-status').textContent = o.status;
+    $('result-status').className = 'badge ' + o.status;
+    $('result-id').textContent = o.id;
+    $('result-total').textContent = 'Total: ' + Number(o.totalAmount).toFixed(2);
+    $('result-reason').hidden = !o.cancelReason;
+    $('result-reason').textContent = o.cancelReason ? 'Reason: ' + o.cancelReason : '';
+  }
+
+  // The saga is asynchronous: POST returns 202 PENDING, so poll until the order reaches a terminal state.
+  function pollUntilDone(id) {
+    clearInterval(pollTimer);
+    pollTimer = setInterval(async () => {
+      try {
+        const r = await fetch('/api/v1/orders/' + id);
+        if (!r.ok) return;
+        const o = await r.json();
+        showOrder(o);
+        if (TERMINAL.has(o.status)) { clearInterval(pollTimer); loadHistory(); }
+      } catch (e) { /* transient; keep polling */ }
+    }, 700);
+  }
+
+  async function loadHistory() {
+    const customerId = $('customerId').value.trim();
+    if (!customerId) return;
+    const query = `query($c:String!){ ordersByCustomer(customerId:$c){ id status totalAmount items{ sku quantity } } }`;
+    const r = await fetch('/graphql', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query, variables: { c: customerId } }) });
+    const body = await r.json();
+    const orders = (body.data && body.data.ordersByCustomer) || [];
+    $('history-empty').hidden = orders.length > 0;
+    $('history').replaceChildren(...orders.map((o) => {
+      const tr = document.createElement('tr');
+      tr.dataset.testid = 'history-row';
+      tr.setAttribute('data-testid', 'history-row');
+      tr.append(cell(o.id.slice(0, 8), 'code'), badgeCell(o.status),
+        cell(o.items.map((i) => i.quantity + '× ' + i.sku).join(', ')), cell(Number(o.totalAmount).toFixed(2)));
+      return tr;
+    }));
+  }
+  function cell(text, tag) { const td = document.createElement('td'); const el = tag ? document.createElement(tag) : td; if (tag) td.append(el); el.textContent = text; return td; }
+  function badgeCell(status) { const td = document.createElement('td'); const s = document.createElement('span'); s.className = 'badge ' + status; s.textContent = status; td.append(s); return td; }
+
+  $('order-form').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const err = $('form-error'); err.hidden = true;
+    const qty = parseInt($('quantity').value, 10);
+    const price = parseFloat($('unitPrice').value);
+    if (!$('customerId').value.trim()) return fail('Customer ID is required');
+    if (!(qty >= 1)) return fail('Quantity must be at least 1');
+    if (!(price > 0)) return fail('Unit price must be greater than 0');
+
+    $('submit').disabled = true;
+    try {
+      const r = await fetch('/api/v1/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
+        body: JSON.stringify({ customerId: $('customerId').value.trim(), items: [{ sku: $('sku').value, quantity: qty, unitPrice: price }] })
+      });
+      if (!r.ok) { const p = await r.json().catch(() => ({})); return fail(p.detail || p.title || ('Request failed: ' + r.status)); }
+      const order = await r.json();
+      showOrder(order);
+      pollUntilDone(order.id);
+    } catch (e) { fail('Network error'); }
+    finally { $('submit').disabled = false; }
+
+    function fail(msg) { err.textContent = msg; err.hidden = false; $('submit').disabled = false; }
+  });
+
+  $('preset-decline').addEventListener('click', () => {
+    $('sku').value = 'SKU-1001'; $('quantity').value = 1; $('unitPrice').value = '20000.00';
+  });
+  $('refresh').addEventListener('click', loadHistory);
+  $('customerId').addEventListener('change', loadHistory);
+  loadHistory();
+</script>
+</body>
+</html>

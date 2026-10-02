@@ -1,0 +1,29 @@
+type Query {
+    "Fetch one order by id."
+    order(id: ID!): Order
+    "Newest first. size is capped at 100."
+    ordersByCustomer(customerId: String!, page: Int = 0, size: Int = 20): [Order!]!
+}
+
+type Order {
+    id: ID!
+    customerId: String!
+    status: OrderStatus!
+    totalAmount: Float!
+    cancelReason: String
+    createdAt: String!
+    items: [OrderItem!]!
+}
+
+type OrderItem {
+    sku: String!
+    quantity: Int!
+    unitPrice: Float!
+}
+
+enum OrderStatus {
+    PENDING
+    INVENTORY_RESERVED
+    CONFIRMED
+    CANCELLED
+}

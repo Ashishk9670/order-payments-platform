@@ -1,0 +1,7 @@
+target/
+.idea/
+*.iml
+.DS_Store
+node_modules/
+e2e/playwright-report/
+e2e/test-results/

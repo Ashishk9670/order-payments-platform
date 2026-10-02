@@ -1,0 +1,129 @@
+asyncapi: 3.0.0
+info:
+  title: Order Platform events
+  version: 1.0.0
+  description: >
+    Kafka event contracts for the order saga. Every message is JSON, keyed by orderId (so all events of one order
+    are ordered within a partition), and carries a unique eventId used by consumers for idempotency.
+    Producers publish through a transactional outbox (at-least-once), so consumers must tolerate duplicates.
+    Failed messages are retried with exponential backoff and then parked on "<topic>.DLT".
+servers:
+  local:
+    host: localhost:9092
+    protocol: kafka
+
+channels:
+  orderCreated:
+    address: order.created.v1
+    messages: { OrderCreated: { $ref: '#/components/messages/OrderCreated' } }
+  inventoryReserved:
+    address: inventory.reserved.v1
+    messages: { InventoryReserved: { $ref: '#/components/messages/InventoryReserved' } }
+  inventoryFailed:
+    address: inventory.failed.v1
+    messages: { InventoryFailed: { $ref: '#/components/messages/InventoryFailed' } }
+  paymentAuthorized:
+    address: payment.authorized.v1
+    messages: { PaymentAuthorized: { $ref: '#/components/messages/PaymentAuthorized' } }
+  paymentFailed:
+    address: payment.failed.v1
+    messages: { PaymentFailed: { $ref: '#/components/messages/PaymentFailed' } }
+  orderConfirmed:
+    address: order.confirmed.v1
+    messages: { OrderConfirmed: { $ref: '#/components/messages/OrderConfirmed' } }
+  orderCancelled:
+    address: order.cancelled.v1
+    messages: { OrderCancelled: { $ref: '#/components/messages/OrderCancelled' } }
+
+operations:
+  order-service.publishOrderCreated:   { action: send,    channel: { $ref: '#/channels/orderCreated' } }
+  inventory-service.onOrderCreated:    { action: receive, channel: { $ref: '#/channels/orderCreated' } }
+  inventory-service.publishReserved:   { action: send,    channel: { $ref: '#/channels/inventoryReserved' } }
+  payment-service.onInventoryReserved: { action: receive, channel: { $ref: '#/channels/inventoryReserved' } }
+  order-service.onInventoryReserved:   { action: receive, channel: { $ref: '#/channels/inventoryReserved' } }
+  inventory-service.publishFailed:     { action: send,    channel: { $ref: '#/channels/inventoryFailed' } }
+  order-service.onInventoryFailed:     { action: receive, channel: { $ref: '#/channels/inventoryFailed' } }
+  payment-service.publishAuthorized:   { action: send,    channel: { $ref: '#/channels/paymentAuthorized' } }
+  order-service.onPaymentAuthorized:   { action: receive, channel: { $ref: '#/channels/paymentAuthorized' } }
+  payment-service.publishFailed:       { action: send,    channel: { $ref: '#/channels/paymentFailed' } }
+  order-service.onPaymentFailed:       { action: receive, channel: { $ref: '#/channels/paymentFailed' } }
+  inventory-service.onPaymentFailed:   { action: receive, channel: { $ref: '#/channels/paymentFailed' } }
+  order-service.publishConfirmed:      { action: send,    channel: { $ref: '#/channels/orderConfirmed' } }
+  notification-service.onConfirmed:    { action: receive, channel: { $ref: '#/channels/orderConfirmed' } }
+  order-service.publishCancelled:      { action: send,    channel: { $ref: '#/channels/orderCancelled' } }
+  notification-service.onCancelled:    { action: receive, channel: { $ref: '#/channels/orderCancelled' } }
+
+components:
+  messages:
+    OrderCreated:
+      payload:
+        type: object
+        required: [eventId, orderId, customerId, items, totalAmount, occurredAt]
+        properties:
+          eventId: { type: string, format: uuid }
+          orderId: { type: string, format: uuid }
+          customerId: { type: string }
+          items:
+            type: array
+            items:
+              type: object
+              required: [sku, quantity]
+              properties: { sku: { type: string }, quantity: { type: integer, minimum: 1 } }
+          totalAmount: { type: number }
+          occurredAt: { type: string, format: date-time }
+    InventoryReserved:
+      payload:
+        type: object
+        required: [eventId, orderId, customerId, totalAmount, occurredAt]
+        properties:
+          eventId: { type: string, format: uuid }
+          orderId: { type: string, format: uuid }
+          customerId: { type: string }
+          totalAmount: { type: number }
+          occurredAt: { type: string, format: date-time }
+    InventoryFailed:
+      payload:
+        type: object
+        required: [eventId, orderId, reason, occurredAt]
+        properties:
+          eventId: { type: string, format: uuid }
+          orderId: { type: string, format: uuid }
+          reason: { type: string }
+          occurredAt: { type: string, format: date-time }
+    PaymentAuthorized:
+      payload:
+        type: object
+        required: [eventId, orderId, paymentId, occurredAt]
+        properties:
+          eventId: { type: string, format: uuid }
+          orderId: { type: string, format: uuid }
+          paymentId: { type: string, format: uuid }
+          occurredAt: { type: string, format: date-time }
+    PaymentFailed:
+      payload:
+        type: object
+        required: [eventId, orderId, reason, occurredAt]
+        properties:
+          eventId: { type: string, format: uuid }
+          orderId: { type: string, format: uuid }
+          reason: { type: string }
+          occurredAt: { type: string, format: date-time }
+    OrderConfirmed:
+      payload:
+        type: object
+        required: [eventId, orderId, customerId, occurredAt]
+        properties:
+          eventId: { type: string, format: uuid }
+          orderId: { type: string, format: uuid }
+          customerId: { type: string }
+          occurredAt: { type: string, format: date-time }
+    OrderCancelled:
+      payload:
+        type: object
+        required: [eventId, orderId, customerId, reason, occurredAt]
+        properties:
+          eventId: { type: string, format: uuid }
+          orderId: { type: string, format: uuid }
+          customerId: { type: string }
+          reason: { type: string }
+          occurredAt: { type: string, format: date-time }
