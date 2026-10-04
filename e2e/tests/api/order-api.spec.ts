@@ -148,7 +148,7 @@ test.describe('GraphQL', () => {
     const timer = setTimeout(() => ctrl.abort(), 30_000);
     const res = await fetch(`${baseURL}/graphql`, {
       method: 'POST', signal: ctrl.signal,
-      headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+      headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream', Authorization: `Bearer ${process.env.E2E_ADMIN_TOKEN}` },
       body: JSON.stringify({ query: `subscription($id:ID!){ orderStatusChanged(id:$id){ status } }`, variables: { id } }),
     });
     expect(res.status).toBe(200);

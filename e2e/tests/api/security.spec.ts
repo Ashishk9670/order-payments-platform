@@ -5,8 +5,11 @@ import { DEV_SECRET, signJwt, unsigned } from '../../support/jwt';
 
 const now = () => Math.floor(Date.now() / 1000);
 
-/** A client with NO default credentials (the project-wide admin token is not applied). */
-const anonymous = (playwright: any) => playwright.request.newContext({ baseURL: URLS.order });
+/**
+ * A client with NO credentials. Playwright's newContext inherits the project's extraHTTPHeaders (the admin token),
+ * so they must be overridden explicitly or the "unauthenticated" requests would silently be authenticated.
+ */
+const anonymous = (playwright: any) => playwright.request.newContext({ baseURL: URLS.order, extraHTTPHeaders: {} });
 
 test.describe('authentication', () => {
   test('requests without a token are 401 problem+json', async ({ playwright }) => {

@@ -7,6 +7,7 @@ import com.example.shop.common.events.InventoryFailed;
 import com.example.shop.common.events.InventoryReserved;
 import com.example.shop.common.events.OrderCreated;
 import com.example.shop.common.events.PaymentFailed;
+import com.example.shop.common.events.PaymentRefunded;
 import com.example.shop.common.events.Topics;
 import com.example.shop.inventory.domain.InventoryItem;
 import com.example.shop.inventory.domain.InventoryItemRepository;
@@ -151,5 +152,40 @@ class InventoryFlowIT {
         var item = items.findById(sku).orElseThrow();
         assertThat(item.getAvailable()).isZero();
         assertThat(item.getReserved()).isEqualTo(5);
+    }
+
+    @Test
+    void refundReleasesTheReservationToo() throws Exception {
+        String sku = sku(10);
+        var order = order(new OrderCreated.Line(sku, 4));
+        send(Topics.ORDER_CREATED, order.orderId().toString(), order);
+        await().atMost(Duration.ofSeconds(30)).untilAsserted(
+                () -> assertThat(items.findById(sku).orElseThrow().getAvailable()).isEqualTo(6));
+
+        send(Topics.PAYMENT_REFUNDED, order.orderId().toString(), PaymentRefunded.of(order.orderId(), UUID.randomUUID()));
+
+        await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> {
+            var item = items.findById(sku).orElseThrow();
+            assertThat(item.getAvailable()).isEqualTo(10);
+            assertThat(item.getReserved()).isZero();
+        });
+    }
+
+    @Test
+    void malformedMessageGoesStraightToTheDeadLetterTopicAndDoesNotBlockTheQueue() throws Exception {
+        String badKey = "poison-" + UUID.randomUUID();
+        try (var dlt = new KafkaProbe(bootstrap(), Topics.ORDER_CREATED + ".DLT")) {
+            kafka.send(Topics.ORDER_CREATED, badKey, "{ this is not valid json").get();
+
+            var parked = dlt.awaitKey(badKey, Duration.ofSeconds(60));
+            assertThat(parked).as("poison message parked on the DLT").isPresent();
+            assertThat(parked.get().value()).contains("not valid json");
+        }
+        // the partition keeps flowing: a good order after the poison one is still processed
+        String sku = sku(3);
+        var good = order(new OrderCreated.Line(sku, 1));
+        send(Topics.ORDER_CREATED, good.orderId().toString(), good);
+        await().atMost(Duration.ofSeconds(30)).untilAsserted(
+                () -> assertThat(items.findById(sku).orElseThrow().getAvailable()).isEqualTo(2));
     }
 }
