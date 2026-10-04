@@ -1,0 +1,29 @@
+{
+  "realm": "orders",
+  "enabled": true,
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "roles": { "realm": [ { "name": "customer" }, { "name": "admin" } ] },
+  "clients": [
+    {
+      "clientId": "storefront",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "redirectUris": ["http://localhost:8080/*", "http://localhost:8081/*"],
+      "webOrigins": ["+"]
+    }
+  ],
+  "users": [
+    { "username": "alice", "enabled": true, "email": "alice@example.test", "firstName": "Alice", "lastName": "Example",
+      "credentials": [ { "type": "password", "value": "alice-dev-password", "temporary": false } ],
+      "realmRoles": ["customer"] },
+    { "username": "bob", "enabled": true, "email": "bob@example.test", "firstName": "Bob", "lastName": "Example",
+      "credentials": [ { "type": "password", "value": "bob-dev-password", "temporary": false } ],
+      "realmRoles": ["customer"] },
+    { "username": "ops", "enabled": true, "email": "ops@example.test", "firstName": "Ops", "lastName": "Admin",
+      "credentials": [ { "type": "password", "value": "ops-dev-password", "temporary": false } ],
+      "realmRoles": ["customer", "admin"] }
+  ]
+}

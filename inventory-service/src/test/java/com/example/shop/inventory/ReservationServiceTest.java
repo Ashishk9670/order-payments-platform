@@ -14,6 +14,7 @@ import com.example.shop.common.events.InventoryFailed;
 import com.example.shop.common.events.InventoryReserved;
 import com.example.shop.common.events.OrderCreated;
 import com.example.shop.common.events.PaymentFailed;
+import com.example.shop.common.events.PaymentRefunded;
 import com.example.shop.common.events.Topics;
 import com.example.shop.common.inbox.IdempotencyGuard;
 import com.example.shop.common.outbox.OutboxService;
@@ -112,6 +113,28 @@ class ReservationServiceTest {
         when(guard.firstTime(any())).thenReturn(false);
 
         service.releaseFor(PaymentFailed.of(UUID.randomUUID(), "declined"));
+
+        verify(items, never()).release(anyString(), anyInt());
+    }
+
+    @Test
+    void refundReleasesReservedStockToo() {
+        var orderId = UUID.randomUUID();
+        var r = new Reservation(orderId, "A", 3);
+        when(guard.firstTime(any())).thenReturn(true);
+        when(reservations.findByOrderIdAndStatus(orderId, Reservation.Status.RESERVED)).thenReturn(List.of(r));
+
+        service.releaseFor(PaymentRefunded.of(orderId, UUID.randomUUID()));
+
+        verify(items).release("A", 3);
+        assertThat(r.getStatus()).isEqualTo(Reservation.Status.RELEASED);
+    }
+
+    @Test
+    void duplicateRefundEventDoesNotReleaseTwice() {
+        when(guard.firstTime(any())).thenReturn(false);
+
+        service.releaseFor(PaymentRefunded.of(UUID.randomUUID(), UUID.randomUUID()));
 
         verify(items, never()).release(anyString(), anyInt());
     }

@@ -1,5 +1,6 @@
 package com.example.shop.order.api;
 
+import com.example.shop.common.events.OrderCancellationRequested;
 import com.example.shop.common.events.OrderCreated;
 import com.example.shop.common.events.Topics;
 import com.example.shop.common.outbox.OutboxService;
@@ -10,6 +11,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,21 +21,35 @@ public class OrderService {
 
     private final OrderRepository orders;
     private final OutboxService outbox;
+    private final ApplicationEventPublisher events;
 
-    public OrderService(OrderRepository orders, OutboxService outbox) {
+    public OrderService(OrderRepository orders, OutboxService outbox, ApplicationEventPublisher events) {
         this.orders = orders;
         this.outbox = outbox;
+        this.events = events;
     }
 
-    /** Saves the order and its OrderCreated event in one transaction (outbox pattern). */
+    /** Saves the order and its OrderCreated event in one transaction (outbox pattern). Prices are already resolved. */
     @Transactional
-    public OrderView place(PlaceOrderRequest request) {
-        Order order = Order.create(request.customerId(), request.items().stream()
-                .map(i -> new Order.ItemSpec(i.sku(), i.quantity(), i.unitPrice())).toList());
+    public OrderView create(String customerId, List<Order.ItemSpec> lines) {
+        Order order = Order.create(customerId, lines);
         orders.save(order);
-        outbox.publish(Topics.ORDER_CREATED, OrderCreated.of(order.getId(), order.getCustomerId(),
-                request.items().stream().map(i -> new OrderCreated.Line(i.sku(), i.quantity())).toList(),
-                order.getTotalAmount()));
+        outbox.publish(Topics.ORDER_CREATED, OrderCreated.of(order.getId(), customerId,
+                lines.stream().map(l -> new OrderCreated.Line(l.sku(), l.quantity())).toList(), order.getTotalAmount()));
+        return OrderView.from(order);
+    }
+
+    /** Starts the refund saga for a confirmed order. */
+    @Transactional
+    public OrderView requestCancellation(UUID id, String reason) {
+        Order order = orders.findWithItemsById(id).orElseThrow(() -> new OrderNotFoundException(id));
+        String text = reason == null || reason.isBlank() ? "Cancelled by customer" : "Cancelled by customer: " + reason.trim();
+        if (!order.requestCancellation(text)) {
+            throw new OrderStateConflictException(
+                    "Only confirmed orders can be cancelled; order is " + order.getStatus());
+        }
+        outbox.publish(Topics.ORDER_CANCELLATION_REQUESTED, OrderCancellationRequested.of(id, text));
+        events.publishEvent(new OrderChanged(id));
         return OrderView.from(order);
     }
 

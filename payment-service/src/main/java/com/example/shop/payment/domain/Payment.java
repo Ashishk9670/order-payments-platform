@@ -14,7 +14,7 @@ import java.util.UUID;
 @Table(name = "payment")
 public class Payment {
 
-    public enum Status { AUTHORIZED, FAILED }
+    public enum Status { AUTHORIZED, FAILED, REFUNDED }
 
     @Id
     private UUID id;
@@ -50,6 +50,15 @@ public class Payment {
         p.failureReason = reason;
         p.createdAt = Instant.now();
         return p;
+    }
+
+    /** @return false unless the payment is currently authorized (a payment can be refunded only once). */
+    public boolean refund() {
+        if (status != Status.AUTHORIZED) {
+            return false;
+        }
+        status = Status.REFUNDED;
+        return true;
     }
 
     public UUID getId() {

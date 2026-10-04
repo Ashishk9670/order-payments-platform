@@ -7,6 +7,8 @@ COPY order-service/pom.xml order-service/
 COPY inventory-service/pom.xml inventory-service/
 COPY payment-service/pom.xml payment-service/
 COPY notification-service/pom.xml notification-service/
+COPY catalog-service/pom.xml catalog-service/
+COPY api-gateway/pom.xml api-gateway/
 RUN --mount=type=cache,target=/root/.m2 mvn -q -B dependency:go-offline -DskipTests || true
 COPY . .
 ARG MODULE

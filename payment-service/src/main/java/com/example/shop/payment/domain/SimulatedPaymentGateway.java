@@ -19,4 +19,9 @@ public class SimulatedPaymentGateway implements PaymentGateway {
     public Result authorize(UUID orderId, BigDecimal amount) {
         return amount.compareTo(limit) > 0 ? Result.decline("Amount exceeds card limit") : Result.approve();
     }
+
+    @Override
+    public Result refund(UUID orderId, BigDecimal amount) {
+        return Result.approve();
+    }
 }

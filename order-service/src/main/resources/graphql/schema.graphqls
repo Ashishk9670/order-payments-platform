@@ -5,6 +5,28 @@ type Query {
     ordersByCustomer(customerId: String!, page: Int = 0, size: Int = 20): [Order!]!
 }
 
+type Mutation {
+    "Prices every line from the catalog; the saga then confirms or cancels asynchronously."
+    placeOrder(input: PlaceOrderInput!): Order!
+    "Starts a refund. Only CONFIRMED orders can be cancelled."
+    cancelOrder(id: ID!, reason: String): Order!
+}
+
+type Subscription {
+    "Current status immediately, then every change; completes when the order reaches CONFIRMED or CANCELLED."
+    orderStatusChanged(id: ID!): OrderStatusUpdate!
+}
+
+input PlaceOrderInput {
+    customerId: String!
+    items: [OrderLineInput!]!
+}
+
+input OrderLineInput {
+    sku: String!
+    quantity: Int!
+}
+
 type Order {
     id: ID!
     customerId: String!
@@ -21,9 +43,16 @@ type OrderItem {
     unitPrice: Float!
 }
 
+type OrderStatusUpdate {
+    id: ID!
+    status: OrderStatus!
+    cancelReason: String
+}
+
 enum OrderStatus {
     PENDING
     INVENTORY_RESERVED
     CONFIRMED
+    REFUND_PENDING
     CANCELLED
 }

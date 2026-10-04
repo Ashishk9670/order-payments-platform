@@ -2,19 +2,20 @@ import { test, expect } from '@playwright/test';
 import { URLS } from '../../playwright.config';
 import { newSku, stock, placeOrder, waitForTerminal } from '../../support/api';
 
-test.describe('order saga across order, inventory, payment services', () => {
-  test('happy path: order is confirmed, stock reserved, payment authorized', async ({ request }) => {
-    const sku = await newSku(request, 10);
+test.describe('order saga across order, catalog, inventory, payment services', () => {
+  test('happy path: priced from catalog, confirmed, stock reserved, payment authorized', async ({ request }) => {
+    const sku = await newSku(request, 10, 12.5);
 
-    const placed = await placeOrder(request, sku, 3, 12.5);
+    const placed = await placeOrder(request, sku, 3);
     expect(placed.status()).toBe(202);
     const order = await placed.json();
     expect(order.status).toBe('PENDING');
+    expect(order.totalAmount).toBeCloseTo(37.5);
+    expect(order.items[0].unitPrice).toBeCloseTo(12.5);
     expect(placed.headers()['location']).toBe(`/api/v1/orders/${order.id}`);
 
     const done = await waitForTerminal(request, order.id);
     expect(done.status).toBe('CONFIRMED');
-    expect(done.totalAmount).toBeCloseTo(37.5);
 
     expect(await stock(request, sku)).toMatchObject({ available: 7, reserved: 3 });
     const payment = await (await request.get(`${URLS.payment}/api/v1/payments/order/${order.id}`)).json();
@@ -34,17 +35,10 @@ test.describe('order saga across order, inventory, payment services', () => {
     expect((await request.get(`${URLS.payment}/api/v1/payments/order/${id}`)).status()).toBe(404); // never charged
   });
 
-  test('unknown SKU cancels the order', async ({ request }) => {
-    const { id } = await (await placeOrder(request, 'NO-SUCH-SKU', 1)).json();
-    const done = await waitForTerminal(request, id);
-    expect(done.status).toBe('CANCELLED');
-    expect(done.cancelReason).toContain('NO-SUCH-SKU');
-  });
-
   test('declined payment cancels the order and compensates by releasing reserved stock', async ({ request }) => {
-    const sku = await newSku(request, 10);
+    const sku = await newSku(request, 10, 20_000); // above the simulated 10 000 card limit
 
-    const { id } = await (await placeOrder(request, sku, 2, 20_000)).json(); // above the simulated 10 000 card limit
+    const { id } = await (await placeOrder(request, sku, 2)).json();
     const done = await waitForTerminal(request, id);
 
     expect(done.status).toBe('CANCELLED');
@@ -60,7 +54,7 @@ test.describe('order saga across order, inventory, payment services', () => {
     const scarce = await newSku(request, 1);
 
     const r = await request.post('/api/v1/orders', {
-      data: { customerId: 'c', items: [{ sku: plenty, quantity: 4, unitPrice: 1 }, { sku: scarce, quantity: 9, unitPrice: 1 }] },
+      data: { customerId: 'c', items: [{ sku: plenty, quantity: 4 }, { sku: scarce, quantity: 9 }] },
     });
     const done = await waitForTerminal(request, (await r.json()).id);
 

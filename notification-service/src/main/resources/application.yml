@@ -11,6 +11,9 @@ spring:
       value-serializer: org.apache.kafka.common.serialization.StringSerializer
     consumer:
       auto-offset-reset: earliest
+      properties:
+        # notice topics created by another service within seconds, not the 5-minute default
+        metadata.max.age.ms: 10000
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
 

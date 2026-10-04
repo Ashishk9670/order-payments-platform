@@ -7,10 +7,13 @@ import com.example.shop.common.events.OrderCancelled;
 import com.example.shop.common.events.OrderConfirmed;
 import com.example.shop.common.events.PaymentAuthorized;
 import com.example.shop.common.events.PaymentFailed;
+import com.example.shop.common.events.PaymentRefundFailed;
+import com.example.shop.common.events.PaymentRefunded;
 import com.example.shop.common.events.Topics;
 import com.example.shop.common.inbox.IdempotencyGuard;
 import com.example.shop.common.outbox.OutboxService;
 import com.example.shop.order.domain.Order;
+import com.example.shop.order.api.OrderChanged;
 import com.example.shop.order.domain.OrderRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.UUID;
@@ -74,6 +77,24 @@ public class OrderSagaListener {
     public void onPaymentFailed(String json) {
         var e = JsonEvents.read(mapper, json, PaymentFailed.class);
         apply(e.eventId(), e.orderId(), o -> o.cancel("Payment: " + e.reason()), cancelled(e.reason()));
+    }
+
+    /** Refund saga, last step: money is back, so the order is finally cancelled. */
+    @KafkaListener(topics = Topics.PAYMENT_REFUNDED, groupId = GROUP)
+    @Transactional
+    public void onPaymentRefunded(String json) {
+        var e = JsonEvents.read(mapper, json, PaymentRefunded.class);
+        apply(e.eventId(), e.orderId(), Order::completeCancellation,
+                o -> outbox.publish(Topics.ORDER_CANCELLED,
+                        OrderCancelled.of(o.getId(), o.getCustomerId(), o.getCancelReason())));
+    }
+
+    /** The refund was refused: the customer keeps a valid order. */
+    @KafkaListener(topics = Topics.PAYMENT_REFUND_FAILED, groupId = GROUP)
+    @Transactional
+    public void onPaymentRefundFailed(String json) {
+        var e = JsonEvents.read(mapper, json, PaymentRefundFailed.class);
+        apply(e.eventId(), e.orderId(), Order::revertCancellation, null);
     }
 
     private java.util.function.Consumer<Order> cancelled(String reason) {

@@ -23,7 +23,7 @@
     button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
     button:disabled { opacity:.5; cursor:not-allowed; }
     .badge { display:inline-block; padding:2px 10px; border-radius:999px; font-size:12px; font-weight:600; }
-    .PENDING, .INVENTORY_RESERVED { background:var(--waitbg); color:var(--wait); }
+    .PENDING, .INVENTORY_RESERVED, .REFUND_PENDING { background:var(--waitbg); color:var(--wait); }
     .CONFIRMED { background:var(--okbg); color:var(--ok); }
     .CANCELLED { background:var(--badbg); color:var(--bad); }
     table { width:100%; border-collapse:collapse; font-size:14px; } th,td { text-align:left; padding:8px 6px; border-bottom:1px solid var(--line); }
@@ -41,19 +41,15 @@
       <div class="grid">
         <div><label for="customerId">Customer ID</label><input id="customerId" name="customerId" value="demo-customer" data-testid="customer-id"></div>
         <div><label for="sku">Product</label>
-          <select id="sku" name="sku" data-testid="sku">
-            <option value="SKU-1001">SKU-1001 (stock 100)</option>
-            <option value="SKU-1002">SKU-1002 (stock 50)</option>
-            <option value="SKU-1003">SKU-1003 (stock 5)</option>
-            <option value="SKU-UNKNOWN">SKU-UNKNOWN (not stocked)</option>
-          </select></div>
+          <select id="sku" name="sku" data-testid="sku"></select></div>
         <div><label for="quantity">Quantity</label><input id="quantity" name="quantity" type="number" min="1" value="1" data-testid="quantity"></div>
-        <div><label for="unitPrice">Unit price</label><input id="unitPrice" name="unitPrice" type="number" step="0.01" value="19.99" data-testid="unit-price"></div>
+        <div><label>Estimated total</label><div id="estimate" class="muted" data-testid="estimate" style="padding:9px 0">-</div></div>
       </div>
       <div class="row">
         <button class="primary" type="submit" id="submit" data-testid="place-order">Place order</button>
-        <button type="button" id="preset-decline" data-testid="preset-decline" title="Total above the simulated card limit of 10000">Preset: payment will be declined</button>
+        <button type="button" id="preset-decline" data-testid="preset-decline" title="Gold-plated widget: total above the simulated card limit of 10000">Preset: payment will be declined</button>
       </div>
+      <p class="muted" style="margin:10px 0 0;font-size:13px">Prices come from the catalog service; the server prices every order.</p>
       <div id="form-error" class="error" role="alert" data-testid="form-error" hidden></div>
     </form>
   </section>
@@ -63,9 +59,13 @@
     <p>
       <span id="result-status" class="badge" data-testid="order-status"></span>
       <code id="result-id" data-testid="order-id"></code>
+      <span id="live" class="muted" data-testid="live-indicator" style="font-size:12px"></span>
     </p>
     <p id="result-total" class="muted" data-testid="order-total"></p>
     <p id="result-reason" class="error" data-testid="order-reason" hidden></p>
+    <div class="row" style="margin-top:0">
+      <button type="button" id="cancel-order" data-testid="cancel-order" hidden>Cancel order (refund)</button>
+    </div>
   </section>
 
   <section class="card" aria-labelledby="history-h">
@@ -84,84 +84,186 @@
 <script>
   const $ = (id) => document.getElementById(id);
   const TERMINAL = new Set(['CONFIRMED', 'CANCELLED']);
-  let pollTimer = null;
+  let current = null;      // latest order being tracked
+  let tracker = null;      // AbortController of the live stream / polling
+  let products = [];
 
-  function showOrder(o) {
+  // ---- auth: the API needs a bearer token. This demo gets one from the dev-only /dev/token endpoint; with a real
+  // identity provider (Keycloak) the login redirect would replace tokenFor(). Tokens are cached per customer.
+  const tokens = new Map();
+  const customer = () => $('customerId').value.trim();
+  async function tokenFor(customerId) {
+    if (!tokens.has(customerId)) {
+      const r = await fetch('/dev/token', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ customerId }) });
+      if (!r.ok) throw new Error('sign-in unavailable');
+      tokens.set(customerId, (await r.json()).token);
+    }
+    return tokens.get(customerId);
+  }
+  async function api(url, opts = {}, customerId = customer()) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const token = await tokenFor(customerId);
+      const r = await fetch(url, { ...opts, headers: { ...(opts.headers || {}), Authorization: 'Bearer ' + token } });
+      if (r.status !== 401) return r;
+      tokens.delete(customerId);   // expired or revoked: sign in again once
+    }
+    throw new Error('not authorized');
+  }
+
+  // ---- catalog -----------------------------------------------------------------------------------------------
+  async function loadProducts() {
+    try {
+      const r = await api('/api/v1/products');
+      if (!r.ok) throw new Error(String(r.status));
+      products = await r.json();
+    } catch (e) { products = []; }
+    const sel = $('sku');
+    sel.replaceChildren(...products.map((p) => option(p.sku, `${p.sku} - ${p.name} (${Number(p.price).toFixed(2)})`)),
+      option('SKU-UNKNOWN', 'SKU-UNKNOWN (not in catalog)'));
+    updateEstimate();
+  }
+  function option(value, label) { const o = document.createElement('option'); o.value = value; o.textContent = label; return o; }
+  function updateEstimate() {
+    const p = products.find((x) => x.sku === $('sku').value);
+    const q = parseInt($('quantity').value, 10);
+    $('estimate').textContent = p && q >= 1 ? (p.price * q).toFixed(2) : '-';
+  }
+  $('sku').addEventListener('change', updateEstimate);
+  $('quantity').addEventListener('input', updateEstimate);
+
+  // ---- rendering -----------------------------------------------------------------------------------------------
+  function render(o) {
+    current = { ...current, ...o };
     $('result-card').hidden = false;
-    $('result-status').textContent = o.status;
-    $('result-status').className = 'badge ' + o.status;
-    $('result-id').textContent = o.id;
-    $('result-total').textContent = 'Total: ' + Number(o.totalAmount).toFixed(2);
-    $('result-reason').hidden = !o.cancelReason;
-    $('result-reason').textContent = o.cancelReason ? 'Reason: ' + o.cancelReason : '';
+    $('result-status').textContent = current.status;
+    $('result-status').className = 'badge ' + current.status;
+    $('result-id').textContent = current.id;
+    if (current.totalAmount != null) $('result-total').textContent = 'Total: ' + Number(current.totalAmount).toFixed(2);
+    $('result-reason').hidden = !current.cancelReason;
+    $('result-reason').textContent = current.cancelReason ? 'Reason: ' + current.cancelReason : '';
+    $('cancel-order').hidden = current.status !== 'CONFIRMED';
   }
 
-  // The saga is asynchronous: POST returns 202 PENDING, so poll until the order reaches a terminal state.
-  function pollUntilDone(id) {
-    clearInterval(pollTimer);
-    pollTimer = setInterval(async () => {
+  // ---- live status: GraphQL subscription over SSE, polling as a fallback ----------------------------------------------
+  async function track(id) {
+    if (tracker) tracker.abort();
+    const ctrl = (tracker = new AbortController());
+    $('live').textContent = '';
+    try {
+      await subscribe(id, ctrl.signal, (u) => { render(u); });
+      $('live').textContent = '';
+    } catch (e) {
+      if (ctrl.signal.aborted) return;
+      $('live').textContent = '(polling)';
+      await poll(id, ctrl.signal);
+    }
+    if (!ctrl.signal.aborted) loadHistory();
+  }
+
+  async function subscribe(id, signal, onUpdate) {
+    const r = await api('/graphql', {
+      method: 'POST', signal,
+      headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+      body: JSON.stringify({ query: 'subscription($id:ID!){ orderStatusChanged(id:$id){ id status cancelReason } }', variables: { id } })
+    }, current.customerId);
+    if (!r.ok || !r.body) throw new Error('stream unavailable');
+    $('live').textContent = '(live)';
+    const reader = r.body.getReader(), dec = new TextDecoder();
+    let buf = '';
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) return;
+      buf += dec.decode(value, { stream: true });
+      let i;
+      while ((i = buf.indexOf('\n\n')) >= 0) {
+        const block = buf.slice(0, i); buf = buf.slice(i + 2);
+        const event = (block.match(/^event: *(.*)$/m) || [])[1];
+        const data = block.split('\n').filter((l) => l.startsWith('data:')).map((l) => l.slice(5).trim()).join('');
+        if (event === 'next' && data) {
+          const payload = JSON.parse(data);
+          if (payload.errors) throw new Error('subscription error');
+          onUpdate(payload.data.orderStatusChanged);
+        } else if (event === 'complete') return;
+      }
+    }
+  }
+
+  async function poll(id, signal) {
+    while (!signal.aborted) {
       try {
-        const r = await fetch('/api/v1/orders/' + id);
-        if (!r.ok) return;
-        const o = await r.json();
-        showOrder(o);
-        if (TERMINAL.has(o.status)) { clearInterval(pollTimer); loadHistory(); }
-      } catch (e) { /* transient; keep polling */ }
-    }, 700);
+        const r = await api('/api/v1/orders/' + id, { signal }, current.customerId);
+        if (r.ok) { const o = await r.json(); render(o); if (TERMINAL.has(o.status)) return; }
+      } catch (e) { if (signal.aborted) return; }
+      await new Promise((res) => setTimeout(res, 700));
+    }
   }
 
+  // ---- history (GraphQL query) -------------------------------------------------------------------------------------
   async function loadHistory() {
     const customerId = $('customerId').value.trim();
     if (!customerId) return;
     const query = `query($c:String!){ ordersByCustomer(customerId:$c){ id status totalAmount items{ sku quantity } } }`;
-    const r = await fetch('/graphql', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query, variables: { c: customerId } }) });
+    const r = await api('/graphql', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query, variables: { c: customerId } }) }, customerId);
     const body = await r.json();
     const orders = (body.data && body.data.ordersByCustomer) || [];
     $('history-empty').hidden = orders.length > 0;
     $('history').replaceChildren(...orders.map((o) => {
       const tr = document.createElement('tr');
-      tr.dataset.testid = 'history-row';
       tr.setAttribute('data-testid', 'history-row');
       tr.append(cell(o.id.slice(0, 8), 'code'), badgeCell(o.status),
-        cell(o.items.map((i) => i.quantity + '× ' + i.sku).join(', ')), cell(Number(o.totalAmount).toFixed(2)));
+        cell(o.items.map((i) => i.quantity + '\u00d7 ' + i.sku).join(', ')), cell(Number(o.totalAmount).toFixed(2)));
       return tr;
     }));
   }
-  function cell(text, tag) { const td = document.createElement('td'); const el = tag ? document.createElement(tag) : td; if (tag) td.append(el); el.textContent = text; return td; }
+  function cell(text, tag) { const td = document.createElement('td'); if (tag) { const el = document.createElement(tag); el.textContent = text; td.append(el); } else td.textContent = text; return td; }
   function badgeCell(status) { const td = document.createElement('td'); const s = document.createElement('span'); s.className = 'badge ' + status; s.textContent = status; td.append(s); return td; }
+
+  // ---- actions -----------------------------------------------------------------------------------------------------
+  function fail(msg) { const e = $('form-error'); e.textContent = msg; e.hidden = false; $('submit').disabled = false; }
 
   $('order-form').addEventListener('submit', async (ev) => {
     ev.preventDefault();
-    const err = $('form-error'); err.hidden = true;
+    $('form-error').hidden = true;
     const qty = parseInt($('quantity').value, 10);
-    const price = parseFloat($('unitPrice').value);
     if (!$('customerId').value.trim()) return fail('Customer ID is required');
     if (!(qty >= 1)) return fail('Quantity must be at least 1');
-    if (!(price > 0)) return fail('Unit price must be greater than 0');
 
     $('submit').disabled = true;
     try {
-      const r = await fetch('/api/v1/orders', {
+      const r = await api('/api/v1/orders', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
-        body: JSON.stringify({ customerId: $('customerId').value.trim(), items: [{ sku: $('sku').value, quantity: qty, unitPrice: price }] })
+        body: JSON.stringify({ customerId: $('customerId').value.trim(), items: [{ sku: $('sku').value, quantity: qty }] })
       });
       if (!r.ok) { const p = await r.json().catch(() => ({})); return fail(p.detail || p.title || ('Request failed: ' + r.status)); }
       const order = await r.json();
-      showOrder(order);
-      pollUntilDone(order.id);
-    } catch (e) { fail('Network error'); }
+      current = null;
+      render(order);
+      track(order.id);
+    } catch (e) { fail(e.message === 'sign-in unavailable' ? 'Sign-in is unavailable: no identity provider configured' : 'Network error'); }
     finally { $('submit').disabled = false; }
+  });
 
-    function fail(msg) { err.textContent = msg; err.hidden = false; $('submit').disabled = false; }
+  $('cancel-order').addEventListener('click', async () => {
+    $('cancel-order').disabled = true;
+    try {
+      const r = await api('/api/v1/orders/' + current.id + '/cancel', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: 'requested from storefront' })
+      }, current.customerId);
+      if (!r.ok) { const p = await r.json().catch(() => ({})); return fail(p.detail || 'Cancel failed'); }
+      render(await r.json());
+      track(current.id);
+    } finally { $('cancel-order').disabled = false; }
   });
 
   $('preset-decline').addEventListener('click', () => {
-    $('sku').value = 'SKU-1001'; $('quantity').value = 1; $('unitPrice').value = '20000.00';
+    $('sku').value = 'SKU-LUXURY'; $('quantity').value = 1; updateEstimate();
   });
   $('refresh').addEventListener('click', loadHistory);
   $('customerId').addEventListener('change', loadHistory);
+  loadProducts();
   loadHistory();
 </script>
 </body>

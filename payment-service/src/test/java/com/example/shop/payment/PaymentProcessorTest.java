@@ -8,8 +8,11 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.example.shop.common.events.InventoryReserved;
+import com.example.shop.common.events.OrderCancellationRequested;
 import com.example.shop.common.events.PaymentAuthorized;
 import com.example.shop.common.events.PaymentFailed;
+import com.example.shop.common.events.PaymentRefundFailed;
+import com.example.shop.common.events.PaymentRefunded;
 import com.example.shop.common.events.Topics;
 import com.example.shop.common.inbox.IdempotencyGuard;
 import com.example.shop.common.outbox.OutboxService;
@@ -87,5 +90,79 @@ class PaymentProcessorTest {
         var declined = gw.authorize(UUID.randomUUID(), new BigDecimal("100.01"));
         assertThat(declined.approved()).isFalse();
         assertThat(declined.declineReason()).isNotBlank();
+    }
+
+    private Payment authorizedPayment(UUID orderId) {
+        var payment = Payment.authorized(orderId, new BigDecimal("42.00"));
+        when(payments.findByOrderId(orderId)).thenReturn(java.util.Optional.of(payment));
+        return payment;
+    }
+
+    @Test
+    void refundOfAuthorizedPaymentMarksItRefundedAndEmitsEvent() {
+        var orderId = UUID.randomUUID();
+        var payment = authorizedPayment(orderId);
+        when(guard.firstTime(any())).thenReturn(true);
+        when(gateway.refund(orderId, payment.getAmount())).thenReturn(PaymentGateway.Result.approve());
+
+        new PaymentProcessor(gateway, payments, guard, outbox).refund(OrderCancellationRequested.of(orderId, "x"));
+
+        assertThat(payment.getStatus()).isEqualTo(Payment.Status.REFUNDED);
+        verify(outbox).publish(eq(Topics.PAYMENT_REFUNDED), any(PaymentRefunded.class));
+    }
+
+    @Test
+    void refundIsRefusedWhenTheGatewayDeclines() {
+        var orderId = UUID.randomUUID();
+        var payment = authorizedPayment(orderId);
+        when(guard.firstTime(any())).thenReturn(true);
+        when(gateway.refund(any(), any())).thenReturn(PaymentGateway.Result.decline("PSP error"));
+
+        new PaymentProcessor(gateway, payments, guard, outbox).refund(OrderCancellationRequested.of(orderId, "x"));
+
+        assertThat(payment.getStatus()).isEqualTo(Payment.Status.AUTHORIZED);
+        var failed = ArgumentCaptor.forClass(PaymentRefundFailed.class);
+        verify(outbox).publish(eq(Topics.PAYMENT_REFUND_FAILED), failed.capture());
+        assertThat(failed.getValue().reason()).isEqualTo("PSP error");
+    }
+
+    @Test
+    void refundWithoutAnAuthorizedPaymentFailsWithoutCallingTheGateway() {
+        var orderId = UUID.randomUUID();
+        when(guard.firstTime(any())).thenReturn(true);
+        when(payments.findByOrderId(orderId)).thenReturn(java.util.Optional.empty());
+
+        new PaymentProcessor(gateway, payments, guard, outbox).refund(OrderCancellationRequested.of(orderId, "x"));
+
+        verify(gateway, never()).refund(any(), any());
+        verify(outbox).publish(eq(Topics.PAYMENT_REFUND_FAILED), any(PaymentRefundFailed.class));
+    }
+
+    @Test
+    void anAlreadyRefundedPaymentCannotBeRefundedTwice() {
+        var orderId = UUID.randomUUID();
+        var payment = authorizedPayment(orderId);
+        payment.refund();
+        when(guard.firstTime(any())).thenReturn(true);
+
+        new PaymentProcessor(gateway, payments, guard, outbox).refund(OrderCancellationRequested.of(orderId, "x"));
+
+        verify(gateway, never()).refund(any(), any());
+        verify(outbox).publish(eq(Topics.PAYMENT_REFUND_FAILED), any(PaymentRefundFailed.class));
+    }
+
+    @Test
+    void duplicateCancellationEventIsIgnored() {
+        when(guard.firstTime(any())).thenReturn(false);
+
+        new PaymentProcessor(gateway, payments, guard, outbox).refund(OrderCancellationRequested.of(UUID.randomUUID(), "x"));
+
+        verify(gateway, never()).refund(any(), any());
+        verify(outbox, never()).publish(any(), any());
+    }
+
+    @Test
+    void simulatedGatewayAlwaysApprovesRefunds() {
+        assertThat(new SimulatedPaymentGateway(new BigDecimal("1")).refund(UUID.randomUUID(), new BigDecimal("999")).approved()).isTrue();
     }
 }

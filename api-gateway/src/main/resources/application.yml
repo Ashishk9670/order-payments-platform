@@ -1,0 +1,26 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: api-gateway
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: 6379
+
+gateway:
+  order-service-url: ${ORDER_SERVICE_URL:http://localhost:8081}
+  rate-limit:
+    replenish-per-second: ${GATEWAY_RATE_REPLENISH:50}
+    burst: ${GATEWAY_RATE_BURST:100}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true

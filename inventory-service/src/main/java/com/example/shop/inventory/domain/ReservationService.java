@@ -4,12 +4,14 @@ import com.example.shop.common.events.InventoryFailed;
 import com.example.shop.common.events.InventoryReserved;
 import com.example.shop.common.events.OrderCreated;
 import com.example.shop.common.events.PaymentFailed;
+import com.example.shop.common.events.PaymentRefunded;
 import com.example.shop.common.events.Topics;
 import com.example.shop.common.inbox.IdempotencyGuard;
 import com.example.shop.common.outbox.OutboxService;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -57,16 +59,26 @@ public class ReservationService {
         log.info("Order {} reserved ({} lines)", order.orderId(), lines.size());
     }
 
-    /** Compensation step of the saga. */
+    /** Compensation step of the order saga. */
     @Transactional
     public void releaseFor(PaymentFailed event) {
-        if (!guard.firstTime(event.eventId())) {
+        release(event.eventId(), event.orderId(), "payment failure");
+    }
+
+    /** Last step of the refund saga: the sale is undone, so the stock goes back on the shelf. */
+    @Transactional
+    public void releaseFor(PaymentRefunded event) {
+        release(event.eventId(), event.orderId(), "refund");
+    }
+
+    private void release(UUID eventId, UUID orderId, String why) {
+        if (!guard.firstTime(eventId)) {
             return;
         }
-        for (Reservation r : reservations.findByOrderIdAndStatus(event.orderId(), Reservation.Status.RESERVED)) {
+        for (Reservation r : reservations.findByOrderIdAndStatus(orderId, Reservation.Status.RESERVED)) {
             items.release(r.getSku(), r.getQuantity());
             r.release();
         }
-        log.info("Order {} stock released after payment failure", event.orderId());
+        log.info("Order {} stock released after {}", orderId, why);
     }
 }

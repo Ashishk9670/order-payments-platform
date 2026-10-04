@@ -1,5 +1,7 @@
 package com.example.shop.order.saga;
 
+import com.example.shop.order.api.OrderChanged;
+
 import org.springframework.cache.CacheManager;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;

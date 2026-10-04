@@ -3,6 +3,7 @@ package com.example.shop.inventory.messaging;
 import com.example.shop.common.events.JsonEvents;
 import com.example.shop.common.events.OrderCreated;
 import com.example.shop.common.events.PaymentFailed;
+import com.example.shop.common.events.PaymentRefunded;
 import com.example.shop.common.events.Topics;
 import com.example.shop.inventory.domain.ReservationService;
 import com.example.shop.inventory.redis.RedisLock;
@@ -35,5 +36,10 @@ public class InventoryListener {
     @KafkaListener(topics = Topics.PAYMENT_FAILED, groupId = "inventory-service")
     public void onPaymentFailed(String json) {
         service.releaseFor(JsonEvents.read(mapper, json, PaymentFailed.class));
+    }
+
+    @KafkaListener(topics = Topics.PAYMENT_REFUNDED, groupId = "inventory-service")
+    public void onPaymentRefunded(String json) {
+        service.releaseFor(JsonEvents.read(mapper, json, PaymentRefunded.class));
     }
 }

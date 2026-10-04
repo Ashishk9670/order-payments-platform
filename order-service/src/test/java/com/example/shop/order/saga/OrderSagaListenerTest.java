@@ -14,9 +14,12 @@ import com.example.shop.common.events.OrderCancelled;
 import com.example.shop.common.events.OrderConfirmed;
 import com.example.shop.common.events.PaymentAuthorized;
 import com.example.shop.common.events.PaymentFailed;
+import com.example.shop.common.events.PaymentRefundFailed;
+import com.example.shop.common.events.PaymentRefunded;
 import com.example.shop.common.events.Topics;
 import com.example.shop.common.inbox.IdempotencyGuard;
 import com.example.shop.common.outbox.OutboxService;
+import com.example.shop.order.api.OrderChanged;
 import com.example.shop.order.domain.Order;
 import com.example.shop.order.domain.OrderRepository;
 import com.example.shop.order.domain.OrderStatus;
@@ -127,6 +130,44 @@ class OrderSagaListenerTest {
 
         listener.onInventoryFailed(json(InventoryFailed.of(unknown, "x")));
 
+        verify(outbox, never()).publish(any(), any());
+    }
+
+    @Test
+    void refundCompletesTheCancellationAndEmitsOrderCancelled() throws Exception {
+        order.markInventoryReserved();
+        order.confirm();
+        order.requestCancellation("Cancelled by customer");
+
+        listener.onPaymentRefunded(json(PaymentRefunded.of(order.getId(), UUID.randomUUID())));
+
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELLED);
+        var captor = org.mockito.ArgumentCaptor.forClass(OrderCancelled.class);
+        verify(outbox).publish(eq(Topics.ORDER_CANCELLED), captor.capture());
+        assertThat(captor.getValue().reason()).isEqualTo("Cancelled by customer");
+    }
+
+    @Test
+    void refundForAnOrderNotAwaitingOneIsIgnored() throws Exception {
+        order.markInventoryReserved();
+        order.confirm();
+
+        listener.onPaymentRefunded(json(PaymentRefunded.of(order.getId(), UUID.randomUUID())));
+
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.CONFIRMED);
+        verify(outbox, never()).publish(any(), any());
+    }
+
+    @Test
+    void refusedRefundKeepsTheOrderConfirmed() throws Exception {
+        order.markInventoryReserved();
+        order.confirm();
+        order.requestCancellation("x");
+
+        listener.onPaymentRefundFailed(json(PaymentRefundFailed.of(order.getId(), "declined")));
+
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.CONFIRMED);
+        verify(spring).publishEvent(new OrderChanged(order.getId()));
         verify(outbox, never()).publish(any(), any());
     }
 

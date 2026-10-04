@@ -64,4 +64,62 @@ class OrderTest {
         assertThat(order.cancel("late")).isFalse();
         assertThat(order.getStatus()).isEqualTo(OrderStatus.CONFIRMED);
     }
+
+    @Test
+    void refundSagaHappyPath() {
+        var order = confirmed();
+        assertThat(order.requestCancellation("Cancelled by customer")).isTrue();
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.REFUND_PENDING);
+        assertThat(order.completeCancellation()).isTrue();
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELLED);
+        assertThat(order.getCancelReason()).isEqualTo("Cancelled by customer");
+    }
+
+    @Test
+    void onlyConfirmedOrdersCanRequestCancellation() {
+        var pending = newOrder();
+        assertThat(pending.requestCancellation("x")).isFalse();
+        var reserved = newOrder();
+        reserved.markInventoryReserved();
+        assertThat(reserved.requestCancellation("x")).isFalse();
+        var cancelled = newOrder();
+        cancelled.cancel("x");
+        assertThat(cancelled.requestCancellation("x")).isFalse();
+    }
+
+    @Test
+    void refusedRefundRestoresConfirmedAndClearsReason() {
+        var order = confirmed();
+        order.requestCancellation("changed my mind");
+
+        assertThat(order.revertCancellation()).isTrue();
+
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.CONFIRMED);
+        assertThat(order.getCancelReason()).isNull();
+    }
+
+    @Test
+    void duplicateRefundEventsAreNoOps() {
+        var order = confirmed();
+        assertThat(order.completeCancellation()).isFalse();
+        assertThat(order.revertCancellation()).isFalse();
+        order.requestCancellation("x");
+        order.completeCancellation();
+        assertThat(order.completeCancellation()).isFalse();
+    }
+
+    @Test
+    void lateFailureEventCannotCancelAnOrderWhoseRefundIsInFlight() {
+        var order = confirmed();
+        order.requestCancellation("x");
+        assertThat(order.cancel("late payment failure")).isFalse();
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.REFUND_PENDING);
+    }
+
+    private Order confirmed() {
+        var order = newOrder();
+        order.markInventoryReserved();
+        order.confirm();
+        return order;
+    }
 }

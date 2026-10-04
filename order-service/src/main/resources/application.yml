@@ -23,6 +23,7 @@ spring:
     redis:
       time-to-live: 30s
       key-prefix: "order-service::"
+      # catalog-price entries live as long as the default TTL (30s): a price change is visible within 30s
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP:localhost:9092}
     producer:
@@ -33,6 +34,9 @@ spring:
         enable.idempotence: true
     consumer:
       auto-offset-reset: earliest
+      properties:
+        # notice topics created by another service within seconds, not the 5-minute default
+        metadata.max.age.ms: 10000
       enable-auto-commit: false
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
@@ -49,3 +53,16 @@ management:
     health:
       probes:
         enabled: true
+
+security:
+  # HS256 shared secret for local/dev/CI. In production leave it empty and set
+  # spring.security.oauth2.resourceserver.jwt.issuer-uri (e.g. Keycloak) instead.
+  jwt:
+    secret: ${JWT_SECRET:}
+  customer-id-claim: ${CUSTOMER_ID_CLAIM:sub}
+  dev-token:
+    enabled: ${DEV_TOKEN_ENABLED:false}   # DEV/CI ONLY: POST /dev/token mints tokens
+
+catalog:
+  url: ${CATALOG_URL:http://localhost:8085}
+  timeout-ms: 2000

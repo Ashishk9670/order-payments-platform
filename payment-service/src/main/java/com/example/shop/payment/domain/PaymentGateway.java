@@ -17,4 +17,6 @@ public interface PaymentGateway {
     }
 
     Result authorize(UUID orderId, BigDecimal amount);
+
+    Result refund(UUID orderId, BigDecimal amount);
 }

@@ -33,7 +33,8 @@ public class KafkaCommonConfig {
         return new KafkaAdmin.NewTopics(Stream.of(
                         Topics.ORDER_CREATED, Topics.ORDER_CONFIRMED, Topics.ORDER_CANCELLED,
                         Topics.INVENTORY_RESERVED, Topics.INVENTORY_FAILED,
-                        Topics.PAYMENT_AUTHORIZED, Topics.PAYMENT_FAILED)
+                        Topics.PAYMENT_AUTHORIZED, Topics.PAYMENT_FAILED,
+                        Topics.ORDER_CANCELLATION_REQUESTED, Topics.PAYMENT_REFUNDED, Topics.PAYMENT_REFUND_FAILED)
                 .map(name -> TopicBuilder.name(name).partitions(3).replicas(1).build())
                 .toArray(org.apache.kafka.clients.admin.NewTopic[]::new));
     }

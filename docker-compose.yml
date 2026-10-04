@@ -58,6 +58,11 @@ services:
       KAFKA_BOOTSTRAP: kafka:19092
       REDIS_HOST: redis
       RATELIMIT_REQUESTS_PER_MINUTE: ${RATE_LIMIT:-120}
+      CATALOG_URL: http://catalog-service:8085
+      # DEV/CI ONLY: shared HS256 secret and the /dev/token endpoint. In production leave JWT_SECRET empty, set
+      # SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI (e.g. the keycloak profile below) and DEV_TOKEN_ENABLED=false.
+      JWT_SECRET: ${JWT_SECRET:-dev-only-secret-dev-only-secret-0123456789}
+      DEV_TOKEN_ENABLED: ${DEV_TOKEN_ENABLED:-true}
     depends_on: &infra
       postgres: { condition: service_healthy }
       kafka: { condition: service_healthy }
@@ -81,6 +86,41 @@ services:
       DB_URL: jdbc:postgresql://postgres:5432/payments
       KAFKA_BOOTSTRAP: kafka:19092
     depends_on: *infra
+
+  api-gateway:
+    profiles: [apps]
+    build: { context: ., args: { MODULE: api-gateway } }
+    ports: ["8080:8080"]
+    environment:
+      ORDER_SERVICE_URL: http://order-service:8081
+      REDIS_HOST: redis
+      GATEWAY_RATE_REPLENISH: ${GATEWAY_RATE_REPLENISH:-50}
+      GATEWAY_RATE_BURST: ${GATEWAY_RATE_BURST:-100}
+    depends_on:
+      redis: { condition: service_healthy }
+
+  keycloak:
+    # Optional real identity provider:  docker compose --profile keycloak up -d keycloak
+    # then run order-service with JWT_SECRET= (empty), CUSTOMER_ID_CLAIM=preferred_username and
+    # SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=http://localhost:8180/realms/orders
+    profiles: [keycloak]
+    image: quay.io/keycloak/keycloak:26.0
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+    ports: ["8180:8080"]
+    volumes:
+      - ./infra/keycloak/realm-orders.json:/opt/keycloak/data/import/realm-orders.json:ro
+
+  catalog-service:
+    profiles: [apps]
+    build: { context: ., args: { MODULE: catalog-service } }
+    ports: ["8085:8085"]
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/catalog
+    depends_on:
+      postgres: { condition: service_healthy }
 
   notification-service:
     profiles: [apps]

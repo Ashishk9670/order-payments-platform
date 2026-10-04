@@ -79,11 +79,39 @@ public class Order {
     }
 
     public boolean cancel(String reason) {
-        if (status == OrderStatus.CONFIRMED || status == OrderStatus.CANCELLED) {
+        if (status == OrderStatus.CONFIRMED || status == OrderStatus.CANCELLED || status == OrderStatus.REFUND_PENDING) {
             return false;
         }
         this.cancelReason = reason;
         transition(OrderStatus.CANCELLED);
+        return true;
+    }
+
+    /** Customer-initiated cancellation: only a confirmed order can be refunded. */
+    public boolean requestCancellation(String reason) {
+        if (status != OrderStatus.CONFIRMED) {
+            return false;
+        }
+        this.cancelReason = reason;
+        transition(OrderStatus.REFUND_PENDING);
+        return true;
+    }
+
+    public boolean completeCancellation() {
+        if (status != OrderStatus.REFUND_PENDING) {
+            return false;
+        }
+        transition(OrderStatus.CANCELLED);
+        return true;
+    }
+
+    /** The refund was refused, so the order stays valid. */
+    public boolean revertCancellation() {
+        if (status != OrderStatus.REFUND_PENDING) {
+            return false;
+        }
+        this.cancelReason = null;
+        transition(OrderStatus.CONFIRMED);
         return true;
     }
 

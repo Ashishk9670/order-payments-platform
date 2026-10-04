@@ -20,6 +20,22 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
         return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, e.getMessage());
     }
 
+    @ExceptionHandler(UnknownProductException.class)
+    ProblemDetail unknownProduct(UnknownProductException e) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_ENTITY, e.getMessage());
+    }
+
+    @ExceptionHandler(CatalogUnavailableException.class)
+    ProblemDetail catalogDown(CatalogUnavailableException e) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE, "Pricing is temporarily unavailable, retry shortly");
+    }
+
+    @ExceptionHandler({OrderStateConflictException.class, org.springframework.orm.ObjectOptimisticLockingFailureException.class})
+    ProblemDetail stateConflict(RuntimeException e) {
+        String detail = e instanceof OrderStateConflictException ? e.getMessage() : "The order was modified concurrently, retry";
+        return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, detail);
+    }
+
     @ExceptionHandler(RateLimitExceededException.class)
     ProblemDetail tooMany(RateLimitExceededException e) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.TOO_MANY_REQUESTS, e.getMessage());

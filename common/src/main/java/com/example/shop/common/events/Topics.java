@@ -10,6 +10,10 @@ public final class Topics {
     public static final String PAYMENT_AUTHORIZED = "payment.authorized.v1";
     public static final String PAYMENT_FAILED = "payment.failed.v1";
 
+    public static final String ORDER_CANCELLATION_REQUESTED = "order.cancellation-requested.v1";
+    public static final String PAYMENT_REFUNDED = "payment.refunded.v1";
+    public static final String PAYMENT_REFUND_FAILED = "payment.refund-failed.v1";
+
     private Topics() {
     }
 }

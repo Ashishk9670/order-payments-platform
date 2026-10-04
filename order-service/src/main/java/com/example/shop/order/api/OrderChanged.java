@@ -1,4 +1,4 @@
-package com.example.shop.order.saga;
+package com.example.shop.order.api;
 
 import java.util.UUID;
 
