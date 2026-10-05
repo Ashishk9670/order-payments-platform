@@ -70,8 +70,14 @@ public class Order {
         return true;
     }
 
+    /**
+     * Payment is only ever requested after stock was reserved, so PaymentAuthorized proves the reservation. The two
+     * events travel on different topics with no ordering guarantee between them, so it may arrive BEFORE
+     * InventoryReserved; accepting it from PENDING avoids an order that is paid but stuck. The late InventoryReserved
+     * is then a harmless no-op (markInventoryReserved only moves a PENDING order).
+     */
     public boolean confirm() {
-        if (status != OrderStatus.INVENTORY_RESERVED) {
+        if (status != OrderStatus.PENDING && status != OrderStatus.INVENTORY_RESERVED) {
             return false;
         }
         transition(OrderStatus.CONFIRMED);

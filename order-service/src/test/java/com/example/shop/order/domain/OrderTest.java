@@ -40,10 +40,20 @@ class OrderTest {
     }
 
     @Test
-    void cannotConfirmBeforeInventoryIsReserved() {
+    void paymentAuthorizedBeforeInventoryReservedStillConfirms() {
         var order = newOrder();
+
+        assertThat(order.confirm()).isTrue();              // PaymentAuthorized overtook InventoryReserved
+        assertThat(order.markInventoryReserved()).isFalse();   // ...and the late InventoryReserved changes nothing
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.CONFIRMED);
+    }
+
+    @Test
+    void cancelledOrderCannotBeConfirmed() {
+        var order = newOrder();
+        order.cancel("no stock");
         assertThat(order.confirm()).isFalse();
-        assertThat(order.getStatus()).isEqualTo(OrderStatus.PENDING);
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELLED);
     }
 
     @Test

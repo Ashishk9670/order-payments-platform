@@ -134,6 +134,17 @@ class OrderSagaListenerTest {
     }
 
     @Test
+    void paymentAuthorizedArrivingBeforeInventoryReservedStillConfirmsAndTheLateEventIsHarmless() throws Exception {
+        listener.onPaymentAuthorized(json(PaymentAuthorized.of(order.getId(), UUID.randomUUID())));
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.CONFIRMED);
+        verify(outbox).publish(eq(Topics.ORDER_CONFIRMED), any(OrderConfirmed.class));
+
+        listener.onInventoryReserved(json(InventoryReserved.of(order.getId(), "cust-1", order.getTotalAmount())));
+
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.CONFIRMED);
+    }
+
+    @Test
     void refundCompletesTheCancellationAndEmitsOrderCancelled() throws Exception {
         order.markInventoryReserved();
         order.confirm();
