@@ -1,4 +1,4 @@
-package com.example.shop.payment.domain;
+package com.example.shop.payment.gateway;
 
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;

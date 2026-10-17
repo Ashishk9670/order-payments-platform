@@ -1,0 +1,25 @@
+version: 2
+updates:
+  - package-ecosystem: maven
+    directory: "/"
+    schedule: { interval: weekly }
+    open-pull-requests-limit: 10
+    groups:
+      spring:
+        patterns: ["org.springframework*"]
+      resilience4j:
+        patterns: ["io.github.resilience4j*"]
+      testing:
+        patterns: ["org.testcontainers*", "org.mockito*", "org.junit*", "com.tngtech.archunit*"]
+  - package-ecosystem: npm
+    directory: "/e2e"
+    schedule: { interval: weekly }
+    groups:
+      playwright:
+        patterns: ["@playwright/*", "@axe-core/*"]
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule: { interval: weekly }
+  - package-ecosystem: docker
+    directory: "/"
+    schedule: { interval: weekly }

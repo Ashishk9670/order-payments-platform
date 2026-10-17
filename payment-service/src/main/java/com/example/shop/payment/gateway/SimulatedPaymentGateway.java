@@ -1,5 +1,6 @@
-package com.example.shop.payment.domain;
+package com.example.shop.payment.gateway;
 
+import com.example.shop.payment.domain.PaymentGateway;
 import java.math.BigDecimal;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Value;

@@ -10,6 +10,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.example.shop.order.catalog.CatalogUnavailableException;
 import com.example.shop.order.catalog.CatalogClient;
 import com.example.shop.order.domain.Order;
 import java.math.BigDecimal;

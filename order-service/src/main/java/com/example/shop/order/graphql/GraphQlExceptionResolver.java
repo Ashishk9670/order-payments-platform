@@ -1,6 +1,6 @@
 package com.example.shop.order.graphql;
 
-import com.example.shop.order.api.CatalogUnavailableException;
+import com.example.shop.order.catalog.CatalogUnavailableException;
 import com.example.shop.order.api.OrderNotFoundException;
 import com.example.shop.order.api.OrderStateConflictException;
 import com.example.shop.order.api.UnknownProductException;

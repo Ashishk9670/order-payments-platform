@@ -3,7 +3,7 @@ package com.example.shop.order.catalog;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.example.shop.order.api.CatalogUnavailableException;
+import com.example.shop.order.catalog.CatalogUnavailableException;
 import com.sun.net.httpserver.HttpServer;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;

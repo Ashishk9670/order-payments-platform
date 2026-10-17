@@ -1,4 +1,4 @@
-package com.example.shop.order.api;
+package com.example.shop.order.redis;
 
 public class RateLimitExceededException extends RuntimeException {
     public RateLimitExceededException(String message) {

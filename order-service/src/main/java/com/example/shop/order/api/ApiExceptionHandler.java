@@ -1,5 +1,7 @@
 package com.example.shop.order.api;
 
+import com.example.shop.order.catalog.CatalogUnavailableException;
+import com.example.shop.order.redis.RateLimitExceededException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.web.bind.annotation.ExceptionHandler;

@@ -1,6 +1,5 @@
 package com.example.shop.order.catalog;
 
-import com.example.shop.order.api.CatalogUnavailableException;
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.decorators.Decorators;

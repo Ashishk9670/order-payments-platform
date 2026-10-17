@@ -2,8 +2,8 @@ package com.example.shop.payment;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.example.shop.payment.domain.HttpPaymentGateway;
-import com.example.shop.payment.domain.PspResilienceConfig;
+import com.example.shop.payment.gateway.HttpPaymentGateway;
+import com.example.shop.payment.gateway.PspResilienceConfig;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;

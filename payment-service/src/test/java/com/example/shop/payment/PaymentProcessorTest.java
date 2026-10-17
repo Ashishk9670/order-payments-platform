@@ -20,7 +20,7 @@ import com.example.shop.payment.domain.Payment;
 import com.example.shop.payment.domain.PaymentGateway;
 import com.example.shop.payment.domain.PaymentProcessor;
 import com.example.shop.payment.domain.PaymentRepository;
-import com.example.shop.payment.domain.SimulatedPaymentGateway;
+import com.example.shop.payment.gateway.SimulatedPaymentGateway;
 import java.math.BigDecimal;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;

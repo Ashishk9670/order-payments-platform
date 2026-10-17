@@ -11,6 +11,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.example.shop.order.catalog.CatalogUnavailableException;
 import com.example.shop.order.domain.OrderStatus;
 import com.example.shop.order.redis.IdempotencyService;
 import com.example.shop.order.redis.RateLimitInterceptor;

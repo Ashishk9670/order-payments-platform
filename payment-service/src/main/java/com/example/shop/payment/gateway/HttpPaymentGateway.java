@@ -1,5 +1,6 @@
-package com.example.shop.payment.domain;
+package com.example.shop.payment.gateway;
 
+import com.example.shop.payment.domain.PaymentGateway;
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.decorators.Decorators;

@@ -23,14 +23,16 @@ jobs:
           distribution: temurin
           java-version: 21
           cache: maven
-      - name: Unit tests (surefire)
-        run: mvn -B -ntp test
-      - name: Upload unit test reports
+      - name: Unit tests + architecture rules + coverage gate (no Docker needed)
+        run: mvn -B -ntp verify -DskipITs
+      - name: Upload unit test and coverage reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: unit-test-reports
-          path: "**/target/surefire-reports/"
+          path: |
+            **/target/surefire-reports/
+            **/target/site/jacoco/
 
   integration:
     name: Integration tests (Testcontainers)

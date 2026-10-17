@@ -10,11 +10,17 @@
     <artifactId>api-gateway</artifactId>
     <description>Single entry point: routing, per-caller rate limiting, request ids</description>
 
+    <properties>
+        <!-- line-coverage floor enforced at "mvn verify"; raise it as coverage grows, never lower it -->
+        <coverage.line.min>0.85</coverage.line.min>
+    </properties>
+
     <dependencies>
         <dependency><groupId>org.springframework.cloud</groupId><artifactId>spring-cloud-starter-gateway-server-webflux</artifactId></dependency>
         <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-data-redis-reactive</artifactId></dependency>
         <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-actuator</artifactId></dependency>
         <dependency><groupId>io.micrometer</groupId><artifactId>micrometer-registry-prometheus</artifactId></dependency>
+        <dependency><groupId>com.tngtech.archunit</groupId><artifactId>archunit-junit5</artifactId><version>${archunit.version}</version><scope>test</scope></dependency>
         <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-test</artifactId><scope>test</scope></dependency>
     </dependencies>
 
