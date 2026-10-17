@@ -30,7 +30,7 @@
         <testcontainers.version>1.21.3</testcontainers.version>
         <resilience4j.version>2.3.0</resilience4j.version>
         <spring-cloud.version>2025.0.1</spring-cloud.version>
-        <archunit.version>1.4.1</archunit.version>
+        <archunit.version>1.5.1</archunit.version>
         <jacoco.version>0.8.13</jacoco.version>
     </properties>
 
