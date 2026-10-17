@@ -14,7 +14,7 @@ COPY . .
 ARG MODULE
 RUN --mount=type=cache,target=/root/.m2 mvn -q -B -pl ${MODULE} -am -DskipTests package
 
-FROM eclipse-temurin:21-jre
+FROM eclipse-temurin:24-jre
 ARG MODULE
 WORKDIR /app
 RUN useradd --system --uid 10001 app
