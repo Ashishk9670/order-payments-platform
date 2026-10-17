@@ -135,6 +135,7 @@
   // ---- rendering -----------------------------------------------------------------------------------------------
   function render(o) {
     current = { ...current, ...o };
+    const firstShow = $('result-card').hidden;
     $('result-card').hidden = false;
     $('result-status').textContent = current.status;
     $('result-status').className = 'badge ' + current.status;
@@ -143,6 +144,11 @@
     $('result-reason').hidden = !current.cancelReason;
     $('result-reason').textContent = current.cancelReason ? 'Reason: ' + current.cancelReason : '';
     $('cancel-order').hidden = current.status !== 'CONFIRMED';
+    // on a phone the result card sits below the form: once it has its final content, bring it into view (first time only)
+    if (firstShow) {
+      const calm = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      requestAnimationFrame(() => $('result-card').scrollIntoView({ block: 'nearest', behavior: calm ? 'auto' : 'smooth' }));
+    }
   }
 
   // ---- live status: GraphQL subscription over SSE, polling as a fallback ----------------------------------------------

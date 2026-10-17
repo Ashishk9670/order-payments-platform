@@ -173,3 +173,7 @@ unit-tested; the connector configuration itself has **not** been run against a l
 * Authentication in local/CI uses a dev token endpoint and a shared secret; Keycloak is provided as a profile but is not exercised by CI.
 * Inventory, payment and catalog admin endpoints are unauthenticated and rely on network isolation.
 * A refund releases stock back to inventory; shipping/fulfilment is out of scope.
+
+## License
+
+[MIT](LICENSE). The development placeholders in this repository (the `postgres` password, the dev JWT secret, the Keycloak realm users, the Grafana admin password) are for local use only; never reuse them anywhere real.
