@@ -23,7 +23,7 @@ jobs:
     env:
       RATE_LIMIT: "100000000"          # the per-IP limiter would otherwise throttle the load generator
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Start the stack
         run: docker compose --profile apps up --build -d

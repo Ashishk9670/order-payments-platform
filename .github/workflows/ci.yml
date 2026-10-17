@@ -17,7 +17,7 @@ jobs:
     name: Unit tests
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -38,7 +38,7 @@ jobs:
     name: Helm chart (lint + render)
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: azure/setup-helm@v4
       - name: Lint
         run: helm lint deploy/helm/order-platform --strict
@@ -57,7 +57,7 @@ jobs:
     name: Integration tests (Testcontainers)
     runs-on: ubuntu-24.04   # Docker is preinstalled; Testcontainers starts Postgres, Kafka and Redis
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -80,7 +80,7 @@ jobs:
     env:
       RATE_LIMIT: "100000"   # the suite fires many requests from one IP
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Build images and start the full stack
         run: docker compose --profile apps up --build -d
