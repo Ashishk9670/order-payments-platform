@@ -7,6 +7,7 @@ name: order-platform
 services:
   postgres:
     image: postgres:16-alpine
+    command: ["postgres", "-c", "wal_level=logical"]   # needed only for the optional Debezium CDC profile; harmless otherwise
     environment:
       POSTGRES_PASSWORD: postgres
     ports: ["5432:5432"]
@@ -54,6 +55,8 @@ services:
     build: { context: ., args: { MODULE: order-service } }
     ports: ["8081:8081"]
     environment:
+      TRACING_SAMPLING: ${TRACING_SAMPLING:-0.0}      # tracing is off unless the observability profile is used (see below)
+      OTLP_TRACING_ENDPOINT: http://jaeger:4318/v1/traces
       DB_URL: jdbc:postgresql://postgres:5432/orders
       KAFKA_BOOTSTRAP: kafka:19092
       REDIS_HOST: redis
@@ -73,6 +76,8 @@ services:
     build: { context: ., args: { MODULE: inventory-service } }
     ports: ["8082:8082"]
     environment:
+      TRACING_SAMPLING: ${TRACING_SAMPLING:-0.0}      # tracing is off unless the observability profile is used (see below)
+      OTLP_TRACING_ENDPOINT: http://jaeger:4318/v1/traces
       DB_URL: jdbc:postgresql://postgres:5432/inventory
       KAFKA_BOOTSTRAP: kafka:19092
       REDIS_HOST: redis
@@ -83,6 +88,8 @@ services:
     build: { context: ., args: { MODULE: payment-service } }
     ports: ["8083:8083"]
     environment:
+      TRACING_SAMPLING: ${TRACING_SAMPLING:-0.0}      # tracing is off unless the observability profile is used (see below)
+      OTLP_TRACING_ENDPOINT: http://jaeger:4318/v1/traces
       DB_URL: jdbc:postgresql://postgres:5432/payments
       KAFKA_BOOTSTRAP: kafka:19092
     depends_on: *infra
@@ -92,6 +99,8 @@ services:
     build: { context: ., args: { MODULE: api-gateway } }
     ports: ["8080:8080"]
     environment:
+      TRACING_SAMPLING: ${TRACING_SAMPLING:-0.0}      # tracing is off unless the observability profile is used (see below)
+      OTLP_TRACING_ENDPOINT: http://jaeger:4318/v1/traces
       ORDER_SERVICE_URL: http://order-service:8081
       REDIS_HOST: redis
       GATEWAY_RATE_REPLENISH: ${GATEWAY_RATE_REPLENISH:-50}
@@ -118,6 +127,8 @@ services:
     build: { context: ., args: { MODULE: catalog-service } }
     ports: ["8085:8085"]
     environment:
+      TRACING_SAMPLING: ${TRACING_SAMPLING:-0.0}      # tracing is off unless the observability profile is used (see below)
+      OTLP_TRACING_ENDPOINT: http://jaeger:4318/v1/traces
       DB_URL: jdbc:postgresql://postgres:5432/catalog
     depends_on:
       postgres: { condition: service_healthy }
@@ -127,6 +138,55 @@ services:
     build: { context: ., args: { MODULE: notification-service } }
     ports: ["8084:8084"]
     environment:
+      TRACING_SAMPLING: ${TRACING_SAMPLING:-0.0}      # tracing is off unless the observability profile is used (see below)
+      OTLP_TRACING_ENDPOINT: http://jaeger:4318/v1/traces
       KAFKA_BOOTSTRAP: kafka:19092
     depends_on:
       kafka: { condition: service_healthy }
+
+  # ---- observability (optional) --------------------------------------------------------------------------------
+  #   TRACING_SAMPLING=1.0 docker compose --profile apps --profile observability up --build -d
+  #   Jaeger UI http://localhost:16686   Prometheus http://localhost:9091   Grafana http://localhost:3000 (admin/admin)
+  jaeger:
+    profiles: [observability]
+    image: jaegertracing/all-in-one:1.62.0
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports: ["16686:16686", "4318:4318"]
+
+  prometheus:
+    profiles: [observability]
+    image: prom/prometheus:v2.55.1
+    volumes:
+      - ./infra/observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports: ["9091:9090"]
+
+  grafana:
+    profiles: [observability]
+    image: grafana/grafana:11.3.0
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin          # dev only
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+    volumes:
+      - ./infra/observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infra/observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports: ["3000:3000"]
+    depends_on: [prometheus]
+
+  # ---- optional: log-based outbox publishing with Debezium (instead of the polling relay) ------------------------
+  #   docker compose --profile cdc up -d kafka-connect
+  #   start the apps with OUTBOX_RELAY_ENABLED=false OUTBOX_CDC_ENABLED=true, then: POSTGRES_PASSWORD=postgres scripts/register-debezium.sh
+  kafka-connect:
+    profiles: [cdc]
+    image: quay.io/debezium/connect:3.0
+    environment:
+      BOOTSTRAP_SERVERS: kafka:19092
+      GROUP_ID: debezium-connect
+      CONFIG_STORAGE_TOPIC: connect_configs
+      OFFSET_STORAGE_TOPIC: connect_offsets
+      STATUS_STORAGE_TOPIC: connect_statuses
+    ports: ["8089:8083"]
+    depends_on:
+      kafka: { condition: service_healthy }
+      postgres: { condition: service_healthy }

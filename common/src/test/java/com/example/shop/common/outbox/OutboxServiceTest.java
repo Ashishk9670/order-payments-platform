@@ -19,6 +19,32 @@ class OutboxServiceTest {
     @Mock OutboxRepository repository;
 
     @Test
+    void storesTheCurrentTraceContextSoTheRelayCanContinueTheTrace() throws Exception {
+        var codec = org.mockito.Mockito.mock(TraceContextCodec.class);
+        org.mockito.Mockito.when(codec.capture()).thenReturn("00-aaaa-bbbb-01");
+        var event = OrderConfirmed.of(UUID.randomUUID(), "cust-1");
+
+        new OutboxService(repository, new ObjectMapper().findAndRegisterModules(), codec).publish(Topics.ORDER_CONFIRMED, event);
+
+        var captor = ArgumentCaptor.forClass(OutboxEvent.class);
+        verify(repository).save(captor.capture());
+        assertThat(captor.getValue().getTraceContext()).isEqualTo("00-aaaa-bbbb-01");
+    }
+
+    @Test
+    void inCdcModeTheRowIsFlushedThenDeletedSoTheLogHasItButTheTableDoesNotGrow() {
+        var event = OrderConfirmed.of(UUID.randomUUID(), "cust-1");
+
+        new OutboxService(repository, new ObjectMapper().findAndRegisterModules(), null, true).publish(Topics.ORDER_CONFIRMED, event);
+
+        var order = org.mockito.Mockito.inOrder(repository);
+        var row = ArgumentCaptor.forClass(OutboxEvent.class);
+        order.verify(repository).saveAndFlush(row.capture());
+        order.verify(repository).delete(row.getValue());
+        org.mockito.Mockito.verify(repository, org.mockito.Mockito.never()).save(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
     void storesTheEventKeyedByOrderIdWithTopicTypeAndJsonPayload() throws Exception {
         var mapper = new ObjectMapper().findAndRegisterModules();
         var event = OrderConfirmed.of(UUID.randomUUID(), "cust-1");

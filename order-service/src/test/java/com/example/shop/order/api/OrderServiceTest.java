@@ -15,6 +15,7 @@ import com.example.shop.common.outbox.OutboxService;
 import com.example.shop.order.domain.Order;
 import com.example.shop.order.domain.OrderRepository;
 import com.example.shop.order.domain.OrderStatus;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
@@ -34,10 +35,11 @@ class OrderServiceTest {
     @Mock OutboxService outbox;
     @Mock ApplicationEventPublisher events;
     OrderService service;
+    final SimpleMeterRegistry meters = new SimpleMeterRegistry();
 
     @BeforeEach
     void setUp() {
-        service = new OrderService(orders, outbox, events);
+        service = new OrderService(orders, outbox, events, meters);
     }
 
     @Test
@@ -51,6 +53,7 @@ class OrderServiceTest {
         assertThat(captor.getValue().totalAmount()).isEqualByComparingTo("7.50");
         assertThat(captor.getValue().items()).containsExactly(new OrderCreated.Line("SKU-1", 3));
         assertThat(view.status()).isEqualTo(OrderStatus.PENDING);
+        assertThat(meters.counter("orders.placed").count()).isEqualTo(1.0);
     }
 
     @Test

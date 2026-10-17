@@ -16,6 +16,7 @@ import com.example.shop.order.domain.Order;
 import com.example.shop.order.api.OrderChanged;
 import com.example.shop.order.domain.OrderRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.micrometer.core.instrument.MeterRegistry;
 import java.util.UUID;
 import java.util.function.Predicate;
 import org.slf4j.Logger;
@@ -40,14 +41,16 @@ public class OrderSagaListener {
     private final OrderRepository orders;
     private final OutboxService outbox;
     private final ApplicationEventPublisher spring;
+    private final MeterRegistry meters;
 
     public OrderSagaListener(ObjectMapper mapper, IdempotencyGuard guard, OrderRepository orders,
-                             OutboxService outbox, ApplicationEventPublisher spring) {
+                             OutboxService outbox, ApplicationEventPublisher spring, MeterRegistry meters) {
         this.mapper = mapper;
         this.guard = guard;
         this.orders = orders;
         this.outbox = outbox;
         this.spring = spring;
+        this.meters = meters;
     }
 
     @KafkaListener(topics = Topics.INVENTORY_RESERVED, groupId = GROUP)
@@ -117,6 +120,7 @@ public class OrderSagaListener {
                 onChanged.accept(order);
             }
             spring.publishEvent(new OrderChanged(orderId));
+            meters.counter("orders.transitions", "status", order.getStatus().name()).increment();
             log.info("Order {} -> {}", orderId, order.getStatus());
         } else {
             log.info("Order {} stays {}: event {} not applicable", orderId, order.getStatus(), eventId);

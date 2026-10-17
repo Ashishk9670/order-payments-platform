@@ -1,0 +1,94 @@
+# The chart deploys the application services only. Postgres, Kafka and Redis are expected to exist already
+# (managed services or separate charts); point at them with `global.*`.
+
+image:
+  registry: ghcr.io/ashishk9670/order-payments-platform   # images are <registry>/<service>:<tag>
+  tag: ""                                                  # defaults to the chart appVersion
+  pullPolicy: IfNotPresent
+  pullSecrets: []
+
+global:
+  postgres:
+    host: postgres
+    port: 5432
+    user: postgres
+    existingSecret: order-platform-db      # Secret holding the DB password (never put passwords in values)
+    passwordKey: password
+  kafka:
+    bootstrapServers: kafka:9092
+  redis:
+    host: redis
+
+security:
+  # Production: validate tokens issued by your identity provider (e.g. Keycloak) and leave the shared secret empty.
+  issuerUri: ""                            # https://keycloak.example.com/realms/orders
+  customerIdClaim: sub                     # preferred_username for the bundled Keycloak realm
+  # Dev/CI only: HS256 shared secret + /dev/token endpoint. Must stay disabled in production.
+  jwt:
+    existingSecret: ""                     # Secret with the key below; empty = not used
+    secretKey: jwt-secret
+  devTokenEnabled: false
+
+payment:
+  gateway: simulated                       # simulated | http
+  psp:
+    url: ""
+    existingSecret: ""                     # Secret holding the processor API key
+    apiKeyKey: api-key
+
+tracing:
+  samplingProbability: "0.05"
+  otlpEndpoint: ""                         # http://otel-collector:4318/v1/traces ; empty disables export noise
+
+ingress:
+  enabled: false
+  className: ""
+  host: orders.example.com
+  annotations: {}
+  tls:
+    enabled: false
+    secretName: ""
+
+networkPolicy:
+  enabled: true                            # only the gateway accepts traffic from outside the release
+
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/path: /actuator/prometheus
+
+services:
+  api-gateway:
+    port: 8080
+    replicas: 2
+    public: true
+    resources: { requests: { cpu: 100m, memory: 256Mi }, limits: { memory: 512Mi } }
+    autoscaling: { enabled: true, minReplicas: 2, maxReplicas: 6, targetCPUUtilizationPercentage: 70 }
+  order-service:
+    port: 8081
+    replicas: 2
+    database: orders
+    resources: { requests: { cpu: 250m, memory: 512Mi }, limits: { memory: 768Mi } }
+    autoscaling: { enabled: true, minReplicas: 2, maxReplicas: 8, targetCPUUtilizationPercentage: 70 }
+  inventory-service:
+    port: 8082
+    replicas: 2
+    database: inventory
+    resources: { requests: { cpu: 250m, memory: 512Mi }, limits: { memory: 768Mi } }
+    autoscaling: { enabled: false }
+  payment-service:
+    port: 8083
+    replicas: 2
+    database: payments
+    resources: { requests: { cpu: 250m, memory: 512Mi }, limits: { memory: 768Mi } }
+    autoscaling: { enabled: false }
+  catalog-service:
+    port: 8085
+    replicas: 2
+    database: catalog
+    resources: { requests: { cpu: 100m, memory: 384Mi }, limits: { memory: 512Mi } }
+    autoscaling: { enabled: false }
+  notification-service:
+    port: 8084
+    replicas: 1
+    resources: { requests: { cpu: 100m, memory: 256Mi }, limits: { memory: 384Mi } }
+    autoscaling: { enabled: false }

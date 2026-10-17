@@ -1,0 +1,55 @@
+name: Load test
+
+# Nightly (and on demand): drives the real stack with k6 and FAILS if latency / saga-completion targets are missed.
+on:
+  schedule:
+    - cron: "30 2 * * *"
+  workflow_dispatch:
+    inputs:
+      rate:
+        description: "Orders per second at the plateau"
+        default: "30"
+      duration:
+        description: "Plateau length"
+        default: "2m"
+
+permissions:
+  contents: read
+
+jobs:
+  k6:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      RATE_LIMIT: "100000000"          # the per-IP limiter would otherwise throttle the load generator
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start the stack
+        run: docker compose --profile apps up --build -d
+
+      - name: Wait for all services
+        run: ./scripts/wait-for-stack.sh
+
+      - uses: grafana/setup-k6-action@v1
+
+      - name: Run k6
+        run: k6 run load/orders.js
+        env:
+          RATE: ${{ inputs.rate || '30' }}
+          DURATION: ${{ inputs.duration || '2m' }}
+
+      - name: Upload summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: k6-summary
+          path: load/summary.json
+
+      - name: Dump service logs on failure
+        if: failure()
+        run: docker compose --profile apps logs --no-color --tail=200
+
+      - name: Tear down
+        if: always()
+        run: docker compose --profile apps down -v

@@ -1,0 +1,27 @@
+{{- if .Values.networkPolicy.enabled }}
+{{- range $name, $svc := .Values.services }}
+{{- $ctx := dict "root" $ "name" $name }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "op.fullname" $ctx }}
+  labels:
+    {{- include "op.labels" $ctx | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "op.selectorLabels" $ctx | nindent 6 }}
+  policyTypes: [Ingress]
+  ingress:
+    {{- if $svc.public }}
+    - ports: [{ port: {{ $svc.port }} }]      # the gateway accepts traffic from the ingress controller / outside
+    {{- else }}
+    - from:                                   # everything else: only other pods of this release
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: {{ $.Release.Name }}
+      ports: [{ port: {{ $svc.port }} }]
+    {{- end }}
+{{- end }}
+{{- end }}

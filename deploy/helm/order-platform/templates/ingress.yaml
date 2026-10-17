@@ -1,0 +1,33 @@
+{{- if .Values.ingress.enabled }}
+{{- $ctx := dict "root" $ "name" "api-gateway" }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ .Release.Name }}-ingress
+  labels:
+    {{- include "op.labels" $ctx | nindent 4 }}
+  {{- with .Values.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- if .Values.ingress.className }}
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- end }}
+  {{- if .Values.ingress.tls.enabled }}
+  tls:
+    - hosts: [{{ .Values.ingress.host | quote }}]
+      secretName: {{ required "ingress.tls.secretName is required when TLS is enabled" .Values.ingress.tls.secretName }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.ingress.host | quote }}
+      http:
+        paths:
+          # only the gateway is exposed; inventory, payment and catalog admin APIs stay cluster-internal
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "op.fullname" $ctx }}
+                port: { number: {{ (index .Values.services "api-gateway").port }} }
+{{- end }}

@@ -1,0 +1,7 @@
+apiVersion: 1
+providers:
+  - name: order-platform
+    folder: Order Platform
+    type: file
+    options:
+      path: /var/lib/grafana/dashboards

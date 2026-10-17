@@ -25,6 +25,8 @@ public class OutboxEvent {
     private Instant createdAt;
     @Column(name = "published_at")
     private Instant publishedAt;
+    @Column(name = "trace_context")
+    private String traceContext;
 
     protected OutboxEvent() {
     }
@@ -36,6 +38,15 @@ public class OutboxEvent {
         this.eventType = eventType;
         this.payload = payload;
         this.createdAt = Instant.now();
+    }
+
+    public OutboxEvent withTraceContext(String traceContext) {
+        this.traceContext = traceContext;
+        return this;
+    }
+
+    public String getTraceContext() {
+        return traceContext;
     }
 
     public void markPublished() {

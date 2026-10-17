@@ -1,0 +1,17 @@
+{{- range $name, $svc := .Values.services }}
+{{- if gt (int $svc.replicas) 1 }}
+{{- $ctx := dict "root" $ "name" $name }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "op.fullname" $ctx }}
+  labels:
+    {{- include "op.labels" $ctx | nindent 4 }}
+spec:
+  minAvailable: 1                      # node drains can never take the last replica
+  selector:
+    matchLabels:
+      {{- include "op.selectorLabels" $ctx | nindent 6 }}
+{{- end }}
+{{- end }}

@@ -45,11 +45,12 @@ class OrderSagaListenerTest {
 
     final ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
     OrderSagaListener listener;
+    final io.micrometer.core.instrument.simple.SimpleMeterRegistry meters = new io.micrometer.core.instrument.simple.SimpleMeterRegistry();
     Order order;
 
     @BeforeEach
     void setUp() {
-        listener = new OrderSagaListener(mapper, guard, orders, outbox, spring);
+        listener = new OrderSagaListener(mapper, guard, orders, outbox, spring, meters);
         order = Order.create("cust-1", List.of(new Order.ItemSpec("SKU-1", 1, new BigDecimal("5.00"))));
         lenient(order);
     }
@@ -69,6 +70,16 @@ class OrderSagaListenerTest {
 
         assertThat(order.getStatus()).isEqualTo(OrderStatus.INVENTORY_RESERVED);
         verify(spring).publishEvent(new OrderChanged(order.getId()));
+    }
+
+    @Test
+    void everyStatusTransitionIsCountedByTargetStatus() throws Exception {
+        order.markInventoryReserved();
+        listener.onPaymentAuthorized(json(PaymentAuthorized.of(order.getId(), UUID.randomUUID())));
+        // a duplicate that changes nothing must not be counted
+        listener.onPaymentAuthorized(json(PaymentAuthorized.of(order.getId(), UUID.randomUUID())));
+
+        assertThat(meters.counter("orders.transitions", "status", "CONFIRMED").count()).isEqualTo(1.0);
     }
 
     @Test

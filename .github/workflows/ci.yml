@@ -34,6 +34,25 @@ jobs:
             **/target/surefire-reports/
             **/target/site/jacoco/
 
+  helm:
+    name: Helm chart (lint + render)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+      - name: Lint
+        run: helm lint deploy/helm/order-platform --strict
+      - name: Render with defaults and with production-style values
+        run: |
+          helm template demo deploy/helm/order-platform > /dev/null
+          helm template prod deploy/helm/order-platform \
+            --set ingress.enabled=true --set ingress.tls.enabled=true --set ingress.tls.secretName=orders-tls \
+            --set security.issuerUri=https://idp.example.com/realms/orders \
+            --set payment.gateway=http --set payment.psp.url=https://psp.example.com --set payment.psp.existingSecret=psp > /dev/null
+      - name: Unsafe configuration must be rejected
+        run: |
+          ! helm template x deploy/helm/order-platform --set payment.gateway=http 2> /dev/null
+
   integration:
     name: Integration tests (Testcontainers)
     runs-on: ubuntu-latest   # Docker is preinstalled; Testcontainers starts Postgres, Kafka and Redis

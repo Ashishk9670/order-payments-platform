@@ -6,6 +6,8 @@ import com.example.shop.common.events.Topics;
 import com.example.shop.common.outbox.OutboxService;
 import com.example.shop.order.domain.Order;
 import com.example.shop.order.domain.OrderRepository;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -22,11 +24,13 @@ public class OrderService {
     private final OrderRepository orders;
     private final OutboxService outbox;
     private final ApplicationEventPublisher events;
+    private final Counter placed;
 
-    public OrderService(OrderRepository orders, OutboxService outbox, ApplicationEventPublisher events) {
+    public OrderService(OrderRepository orders, OutboxService outbox, ApplicationEventPublisher events, MeterRegistry meters) {
         this.orders = orders;
         this.outbox = outbox;
         this.events = events;
+        this.placed = Counter.builder("orders.placed").description("Orders accepted").register(meters);
     }
 
     /** Saves the order and its OrderCreated event in one transaction (outbox pattern). Prices are already resolved. */
@@ -34,6 +38,7 @@ public class OrderService {
     public OrderView create(String customerId, List<Order.ItemSpec> lines) {
         Order order = Order.create(customerId, lines);
         orders.save(order);
+        placed.increment();
         outbox.publish(Topics.ORDER_CREATED, OrderCreated.of(order.getId(), customerId,
                 lines.stream().map(l -> new OrderCreated.Line(l.sku(), l.quantity())).toList(), order.getTotalAmount()));
         return OrderView.from(order);
