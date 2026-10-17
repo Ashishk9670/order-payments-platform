@@ -27,7 +27,7 @@ jobs:
         run: mvn -B -ntp verify -DskipITs
       - name: Upload unit test and coverage reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: unit-test-reports
           path: |
@@ -67,7 +67,7 @@ jobs:
         run: mvn -B -ntp verify
       - name: Upload failsafe reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: integration-test-reports
           path: "**/target/failsafe-reports/"
@@ -106,7 +106,7 @@ jobs:
 
       - name: Upload Playwright report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-report
           path: |
