@@ -40,3 +40,12 @@ management:
     health:
       probes:
         enabled: true
+
+payment:
+  gateway: ${PAYMENT_GATEWAY:simulated}     # simulated | http
+  simulated-limit: ${PAYMENT_SIMULATED_LIMIT:10000}
+
+psp:                                          # used when payment.gateway=http
+  url: ${PSP_URL:http://localhost:9090}
+  api-key: ${PSP_API_KEY:}                    # secret: provide via environment / secret store, never commit
+  timeout-ms: ${PSP_TIMEOUT_MS:3000}

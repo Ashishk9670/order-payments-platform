@@ -74,8 +74,11 @@ test.describe('accessibility (WCAG 2.1 A/AA)', () => {
   });
 });
 
+// defaultBrowserType cannot be set per describe-group (it would force a new worker); everything else can
+const { defaultBrowserType: _ignored, ...pixel5 } = devices['Pixel 5'];
+
 test.describe('responsive layout', () => {
-  test.use({ ...devices['Pixel 5'] });   // 393x727 touch device, Chromium
+  test.use(pixel5);   // 393x727 touch device, Chromium
 
   test('no horizontal scrolling and the form is usable on a phone', async ({ page }) => {
     await page.goto('/');

@@ -3,10 +3,12 @@ package com.example.shop.payment.domain;
 import java.math.BigDecimal;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 /** Demo adapter: approves everything up to a limit, so you can trigger the "payment failed" saga path on demand. */
 @Component
+@ConditionalOnProperty(name = "payment.gateway", havingValue = "simulated", matchIfMissing = true)
 public class SimulatedPaymentGateway implements PaymentGateway {
 
     private final BigDecimal limit;

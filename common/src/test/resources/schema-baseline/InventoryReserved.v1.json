@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/schemas/InventoryReserved.v1.json",
+  "title": "InventoryReserved",
+  "type": "object",
+  "properties": {
+    "eventId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "orderId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "occurredAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "customerId": {
+      "type": "string"
+    },
+    "totalAmount": {
+      "type": "number"
+    }
+  },
+  "required": [
+    "eventId",
+    "orderId",
+    "occurredAt",
+    "customerId",
+    "totalAmount"
+  ]
+}

@@ -1,7 +1,7 @@
 asyncapi: 3.0.0
 info:
   title: Order Platform events
-  version: 1.0.0
+  version: 1.1.0
   description: >
     Kafka event contracts for the order saga. Every message is JSON, keyed by orderId (so all events of one order
     are ordered within a partition), and carries a unique eventId used by consumers for idempotency.
@@ -34,6 +34,15 @@ channels:
   orderCancelled:
     address: order.cancelled.v1
     messages: { OrderCancelled: { $ref: '#/components/messages/OrderCancelled' } }
+  orderCancellationRequested:
+    address: order.cancellation-requested.v1
+    messages: { OrderCancellationRequested: { $ref: '#/components/messages/OrderCancellationRequested' } }
+  paymentRefunded:
+    address: payment.refunded.v1
+    messages: { PaymentRefunded: { $ref: '#/components/messages/PaymentRefunded' } }
+  paymentRefundFailed:
+    address: payment.refund-failed.v1
+    messages: { PaymentRefundFailed: { $ref: '#/components/messages/PaymentRefundFailed' } }
 
 operations:
   order-service.publishOrderCreated:   { action: send,    channel: { $ref: '#/channels/orderCreated' } }
@@ -52,6 +61,13 @@ operations:
   notification-service.onConfirmed:    { action: receive, channel: { $ref: '#/channels/orderConfirmed' } }
   order-service.publishCancelled:      { action: send,    channel: { $ref: '#/channels/orderCancelled' } }
   notification-service.onCancelled:    { action: receive, channel: { $ref: '#/channels/orderCancelled' } }
+  order-service.publishCancellationRequested: { action: send,    channel: { $ref: '#/channels/orderCancellationRequested' } }
+  payment-service.onCancellationRequested:    { action: receive, channel: { $ref: '#/channels/orderCancellationRequested' } }
+  payment-service.publishRefunded:     { action: send,    channel: { $ref: '#/channels/paymentRefunded' } }
+  order-service.onPaymentRefunded:     { action: receive, channel: { $ref: '#/channels/paymentRefunded' } }
+  inventory-service.onPaymentRefunded: { action: receive, channel: { $ref: '#/channels/paymentRefunded' } }
+  payment-service.publishRefundFailed: { action: send,    channel: { $ref: '#/channels/paymentRefundFailed' } }
+  order-service.onPaymentRefundFailed: { action: receive, channel: { $ref: '#/channels/paymentRefundFailed' } }
 
 components:
   messages:
@@ -125,5 +141,32 @@ components:
           eventId: { type: string, format: uuid }
           orderId: { type: string, format: uuid }
           customerId: { type: string }
+          reason: { type: string }
+          occurredAt: { type: string, format: date-time }
+    OrderCancellationRequested:
+      payload:
+        type: object
+        required: [eventId, orderId, reason, occurredAt]
+        properties:
+          eventId: { type: string, format: uuid }
+          orderId: { type: string, format: uuid }
+          reason: { type: string }
+          occurredAt: { type: string, format: date-time }
+    PaymentRefunded:
+      payload:
+        type: object
+        required: [eventId, orderId, paymentId, occurredAt]
+        properties:
+          eventId: { type: string, format: uuid }
+          orderId: { type: string, format: uuid }
+          paymentId: { type: string, format: uuid }
+          occurredAt: { type: string, format: date-time }
+    PaymentRefundFailed:
+      payload:
+        type: object
+        required: [eventId, orderId, reason, occurredAt]
+        properties:
+          eventId: { type: string, format: uuid }
+          orderId: { type: string, format: uuid }
           reason: { type: string }
           occurredAt: { type: string, format: date-time }
