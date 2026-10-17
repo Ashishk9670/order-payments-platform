@@ -22,8 +22,14 @@ concurrency:
 jobs:
   publish:
     name: Publish ${{ matrix.module }}
-    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
-    runs-on: ubuntu-latest
+    # workflow_run fires for ANY run named CI, including pull requests from forks whose branch happens to be called
+    # "main". Publishing needs package-write rights, so only release code that was pushed to THIS repository.
+    if: >-
+      github.event_name != 'workflow_run' || (
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.event == 'push' &&
+        github.event.workflow_run.head_repository.full_name == github.repository )
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:

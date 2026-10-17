@@ -18,7 +18,7 @@ permissions:
 
 jobs:
   k6:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
       RATE_LIMIT: "100000000"          # the per-IP limiter would otherwise throttle the load generator

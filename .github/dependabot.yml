@@ -1,25 +1,48 @@
 version: 2
+
+# One grouped PR per ecosystem for minor/patch updates. Major versions are ignored on purpose: they need a human
+# decision (and often code changes), so they are not offered as one-click PRs.
 updates:
   - package-ecosystem: maven
     directory: "/"
     schedule: { interval: weekly }
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 3
     groups:
-      spring:
-        patterns: ["org.springframework*"]
-      resilience4j:
-        patterns: ["io.github.resilience4j*"]
-      testing:
-        patterns: ["org.testcontainers*", "org.mockito*", "org.junit*", "com.tngtech.archunit*"]
+      maven-minor-and-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+      # the Spring Boot / Spring Cloud release trains move together and are upgraded deliberately
+      - dependency-name: "org.springframework.cloud:spring-cloud-dependencies"
+        update-types: ["version-update:semver-minor"]
+
   - package-ecosystem: npm
     directory: "/e2e"
     schedule: { interval: weekly }
+    open-pull-requests-limit: 2
     groups:
-      playwright:
-        patterns: ["@playwright/*", "@axe-core/*"]
+      e2e-minor-and-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+
   - package-ecosystem: github-actions
     directory: "/"
     schedule: { interval: weekly }
+    open-pull-requests-limit: 2
+    groups:
+      actions:
+        patterns: ["*"]
+
   - package-ecosystem: docker
     directory: "/"
     schedule: { interval: weekly }
+    open-pull-requests-limit: 2
+    ignore:
+      # the build image pins Maven + JDK 21 and the runtime image JRE 21 (the project targets Java 21)
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
