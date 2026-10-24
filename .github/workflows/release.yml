@@ -77,7 +77,7 @@ jobs:
       # Scan the exact image that was pushed (by digest). Fixable HIGH/CRITICAL findings fail the job; the "unfixed" ones
       # (no patch exists yet) are ignored so the gate only blocks on things someone can actually do something about.
       - name: Scan the image for vulnerabilities (Trivy)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.33.1
         with:
           image-ref: ghcr.io/${{ github.repository }}/${{ matrix.module }}@${{ steps.build.outputs.digest }}
           severity: HIGH,CRITICAL
