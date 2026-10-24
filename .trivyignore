@@ -5,6 +5,10 @@
 CVE-2026-47884
 CVE-2026-47890
 
-# Go standard library inside the base image's /usr/bin/pebble (the image's init process), not code we build. Exit: rebuild on a
+# Go standard library (1.27.1) inside the base image's /usr/bin/pebble (the image's init process), not code we build; we never expose
+# it to network input. Exit: rebuild on a
 # base image whose pebble is built with Go >= 1.27.3 (rebuilding the image picks it up automatically once published).
 CVE-2026-111943
+CVE-2026-78667
+CVE-2026-78669
+CVE-2026-97031
