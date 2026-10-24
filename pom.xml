@@ -35,16 +35,16 @@
         <coverage.line.min>0.00</coverage.line.min>
         <spring-boot.version>3.5.16</spring-boot.version>
         <!-- security patch releases newer than what Spring Boot 3.5.16 manages (Trivy findings); drop each override once Boot catches up -->
-        <jackson.override>2.21.7</jackson.override>
+        <jackson.override>2.22.4</jackson.override>
         <tomcat.override>10.1.61</tomcat.override>
-        <netty.override>4.1.137.Final</netty.override>
-        <postgresql.override>42.7.12</postgresql.override>
+        <netty.override>4.2.19.Final</netty.override>
+        <postgresql.override>42.7.14</postgresql.override>
         <bouncycastle.override>1.86</bouncycastle.override>
         <testcontainers.version>1.21.3</testcontainers.version>
-        <resilience4j.version>2.3.0</resilience4j.version>
-        <spring-cloud.version>2025.0.1</spring-cloud.version>
-        <archunit.version>1.4.1</archunit.version>
-        <jacoco.version>0.8.13</jacoco.version>
+        <resilience4j.version>2.4.0</resilience4j.version>
+        <spring-cloud.version>2025.0.3</spring-cloud.version>
+        <archunit.version>1.5.1</archunit.version>
+        <jacoco.version>0.8.15</jacoco.version>
     </properties>
 
     <dependencyManagement>
@@ -52,7 +52,7 @@
             <dependency>
                 <groupId>at.yawk.lz4</groupId>
                 <artifactId>lz4-java</artifactId>
-                <version>1.11.4</version>   <!-- arbitrary code execution fixed in 1.11.4; listed before the BOM so it wins -->
+                <version>1.12.0</version>   <!-- arbitrary code execution fixed in 1.11.4; listed before the BOM so it wins -->
             </dependency>
             <!-- Overrides of Spring Boot's managed versions. They must come BEFORE the Boot BOM import: the first declaration wins. -->
             <dependency>
@@ -184,7 +184,7 @@
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-surefire-plugin</artifactId>
-                    <version>3.5.3</version>
+                    <version>3.6.0</version>
                     <configuration>
                         <!-- lets Mockito/ByteBuddy run on newer JDKs than it was released for -->
                         <argLine>@{argLine} -Dnet.bytebuddy.experimental=true</argLine>
@@ -193,7 +193,7 @@
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-failsafe-plugin</artifactId>
-                    <version>3.5.3</version>
+                    <version>3.6.0</version>
                     <configuration>
                         <argLine>@{argLine} -Dnet.bytebuddy.experimental=true</argLine>
                     </configuration>
