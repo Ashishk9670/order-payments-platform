@@ -125,3 +125,28 @@ jobs:
         run: docker compose -f docker-compose.yml -f docker-compose.cdc.yml --profile apps --profile cdc logs --no-color --tail=200
       - if: always()
         run: docker compose -f docker-compose.yml -f docker-compose.cdc.yml --profile apps --profile cdc down -v
+
+  chaos:
+    name: Failure injection (Kafka, Redis, Postgres, services)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start the standard stack
+        run: docker compose --profile apps up --build -d
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: e2e/package-lock.json }
+      - run: npm ci
+        working-directory: e2e
+      - run: ./scripts/wait-for-stack.sh
+      - name: Pause/stop dependencies mid-flow and prove nothing is lost, duplicated or oversold
+        working-directory: e2e
+        run: E2E_CHAOS=1 npx playwright test --project=chaos
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with: { name: chaos-report, path: "e2e/playwright-report/\ne2e/test-results/" }
+      - if: failure()
+        run: docker compose --profile apps logs --no-color --tail=200
+      - if: always()
+        run: docker compose --profile apps down -v

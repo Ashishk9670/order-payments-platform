@@ -1,6 +1,8 @@
 package com.example.shop.order.saga;
 
+import com.example.shop.common.events.InventoryExpired;
 import com.example.shop.common.events.InventoryFailed;
+import com.example.shop.common.events.OrderCancellationRequested;
 import com.example.shop.common.events.InventoryReserved;
 import com.example.shop.common.events.JsonEvents;
 import com.example.shop.common.events.OrderCancelled;
@@ -15,6 +17,7 @@ import com.example.shop.common.outbox.OutboxService;
 import com.example.shop.order.domain.Order;
 import com.example.shop.order.api.OrderChanged;
 import com.example.shop.order.domain.OrderRepository;
+import com.example.shop.order.domain.OrderStatus;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.util.UUID;
@@ -67,12 +70,29 @@ public class OrderSagaListener {
         apply(e.eventId(), e.orderId(), o -> o.cancel("Inventory: " + e.reason()), cancelled(e.reason()));
     }
 
+    /** Stock was held but never paid for: give up on the order. */
+    @KafkaListener(topics = Topics.INVENTORY_EXPIRED, groupId = GROUP)
+    @Transactional
+    public void onInventoryExpired(String json) {
+        var e = JsonEvents.read(mapper, json, InventoryExpired.class);
+        apply(e.eventId(), e.orderId(), o -> o.cancel("Inventory: " + e.reason()), cancelled(e.reason()));
+    }
+
     @KafkaListener(topics = Topics.PAYMENT_AUTHORIZED, groupId = GROUP)
     @Transactional
     public void onPaymentAuthorized(String json) {
         var e = JsonEvents.read(mapper, json, PaymentAuthorized.class);
         apply(e.eventId(), e.orderId(), Order::confirm,
-                o -> outbox.publish(Topics.ORDER_CONFIRMED, OrderConfirmed.of(o.getId(), o.getCustomerId())));
+                o -> outbox.publish(Topics.ORDER_CONFIRMED, OrderConfirmed.of(o.getId(), o.getCustomerId())),
+                // Money was taken for an order that is already CANCELLED (for example its reservation expired while the payment
+                // was in flight). Nothing may keep that money: start the refund path.
+                o -> {
+                    if (o.getStatus() == OrderStatus.CANCELLED) {
+                        outbox.publish(Topics.ORDER_CANCELLATION_REQUESTED,
+                                OrderCancellationRequested.of(o.getId(), "Payment arrived after the order was cancelled"));
+                        meters.counter("orders.late_payments_refunded").increment();
+                    }
+                });
     }
 
     @KafkaListener(topics = Topics.PAYMENT_FAILED, groupId = GROUP)
@@ -105,6 +125,11 @@ public class OrderSagaListener {
     }
 
     private void apply(UUID eventId, UUID orderId, Predicate<Order> transition, java.util.function.Consumer<Order> onChanged) {
+        apply(eventId, orderId, transition, onChanged, null);
+    }
+
+    private void apply(UUID eventId, UUID orderId, Predicate<Order> transition, java.util.function.Consumer<Order> onChanged,
+                       java.util.function.Consumer<Order> onRejected) {
         if (!guard.firstTime(eventId)) {
             log.debug("Duplicate event {} skipped", eventId);
             return;
@@ -124,6 +149,9 @@ public class OrderSagaListener {
             log.info("Order {} -> {}", orderId, order.getStatus());
         } else {
             log.info("Order {} stays {}: event {} not applicable", orderId, order.getStatus(), eventId);
+            if (onRejected != null) {
+                onRejected.accept(order);
+            }
         }
     }
 }

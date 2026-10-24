@@ -56,4 +56,24 @@ class IdempotencyServiceTest {
         service.complete("k", id);
         verify(ops).set("idem:order:k", id.toString(), Duration.ofHours(24));
     }
+
+    @Test
+    void claimRefusesWhenRedisIsDownBecauseItCannotPromiseIdempotency() {
+        when(ops.setIfAbsent(eq("idem:order:k"), eq("PENDING"), any(Duration.class)))
+                .thenThrow(new org.springframework.data.redis.RedisConnectionFailureException("down"));
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.claim("k")).isInstanceOf(IdempotencyUnavailableException.class);
+    }
+
+    @Test
+    void recordingTheResultOrReleasingTheKeyNeverFailsAnOrderThatAlreadyExists() {
+        org.mockito.Mockito.doThrow(new org.springframework.data.redis.RedisConnectionFailureException("down"))
+                .when(ops).set(eq("idem:order:k"), any(), any(Duration.class));
+        when(redis.delete("idem:order:k")).thenThrow(new org.springframework.data.redis.RedisConnectionFailureException("down"));
+
+        org.assertj.core.api.Assertions.assertThatCode(() -> {
+            service.complete("k", UUID.randomUUID());
+            service.release("k");
+        }).doesNotThrowAnyException();
+    }
 }

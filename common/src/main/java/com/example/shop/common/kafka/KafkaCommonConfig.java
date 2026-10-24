@@ -2,7 +2,6 @@ package com.example.shop.common.kafka;
 
 import com.example.shop.common.events.Topics;
 import io.micrometer.core.instrument.MeterRegistry;
-import java.util.stream.Stream;
 import org.apache.kafka.common.TopicPartition;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
@@ -40,11 +39,7 @@ public class KafkaCommonConfig {
 
     @Bean
     public KafkaAdmin.NewTopics platformTopics() {
-        return new KafkaAdmin.NewTopics(Stream.of(
-                        Topics.ORDER_CREATED, Topics.ORDER_CONFIRMED, Topics.ORDER_CANCELLED,
-                        Topics.INVENTORY_RESERVED, Topics.INVENTORY_FAILED,
-                        Topics.PAYMENT_AUTHORIZED, Topics.PAYMENT_FAILED,
-                        Topics.ORDER_CANCELLATION_REQUESTED, Topics.PAYMENT_REFUNDED, Topics.PAYMENT_REFUND_FAILED)
+        return new KafkaAdmin.NewTopics(Topics.all().stream()
                 .map(name -> TopicBuilder.name(name).partitions(3).replicas(1).build())
                 .toArray(org.apache.kafka.clients.admin.NewTopic[]::new));
     }

@@ -1,7 +1,7 @@
 asyncapi: 3.0.0
 info:
   title: Order Platform events
-  version: 1.1.0
+  version: 1.2.0
   description: >
     Kafka event contracts for the order saga. Every message is JSON, keyed by orderId (so all events of one order
     are ordered within a partition), and carries a unique eventId used by consumers for idempotency.
@@ -43,6 +43,9 @@ channels:
   paymentRefundFailed:
     address: payment.refund-failed.v1
     messages: { PaymentRefundFailed: { $ref: '#/components/messages/PaymentRefundFailed' } }
+  inventoryExpired:
+    address: inventory.expired.v1
+    messages: { InventoryExpired: { $ref: '#/components/messages/InventoryExpired' } }
 
 operations:
   order-service.publishOrderCreated:   { action: send,    channel: { $ref: '#/channels/orderCreated' } }
@@ -68,6 +71,9 @@ operations:
   inventory-service.onPaymentRefunded: { action: receive, channel: { $ref: '#/channels/paymentRefunded' } }
   payment-service.publishRefundFailed: { action: send,    channel: { $ref: '#/channels/paymentRefundFailed' } }
   order-service.onPaymentRefundFailed: { action: receive, channel: { $ref: '#/channels/paymentRefundFailed' } }
+  inventory-service.publishExpired:    { action: send,    channel: { $ref: '#/channels/inventoryExpired' } }
+  order-service.onInventoryExpired:    { action: receive, channel: { $ref: '#/channels/inventoryExpired' } }
+  inventory-service.onPaymentAuthorized: { action: receive, channel: { $ref: '#/channels/paymentAuthorized' } }
 
 components:
   messages:
@@ -162,6 +168,15 @@ components:
           paymentId: { type: string, format: uuid }
           occurredAt: { type: string, format: date-time }
     PaymentRefundFailed:
+      payload:
+        type: object
+        required: [eventId, orderId, reason, occurredAt]
+        properties:
+          eventId: { type: string, format: uuid }
+          orderId: { type: string, format: uuid }
+          reason: { type: string }
+          occurredAt: { type: string, format: date-time }
+    InventoryExpired:
       payload:
         type: object
         required: [eventId, orderId, reason, occurredAt]

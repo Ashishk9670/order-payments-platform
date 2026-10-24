@@ -14,6 +14,8 @@ global:
     user: postgres
     existingSecret: order-platform-db      # Secret holding the DB password (never put passwords in values)
     passwordKey: password
+    # fail fast on a hung database instead of letting request threads wait forever
+    jdbcParams: "connectTimeout=3&socketTimeout=15"
   kafka:
     bootstrapServers: kafka:9092
   redis:

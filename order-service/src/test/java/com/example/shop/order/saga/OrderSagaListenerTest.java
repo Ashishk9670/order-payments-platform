@@ -8,7 +8,9 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.example.shop.common.events.DomainEvent;
+import com.example.shop.common.events.InventoryExpired;
 import com.example.shop.common.events.InventoryFailed;
+import com.example.shop.common.events.OrderCancellationRequested;
 import com.example.shop.common.events.InventoryReserved;
 import com.example.shop.common.events.OrderCancelled;
 import com.example.shop.common.events.OrderConfirmed;
@@ -191,6 +193,70 @@ class OrderSagaListenerTest {
         assertThat(order.getStatus()).isEqualTo(OrderStatus.CONFIRMED);
         verify(spring).publishEvent(new OrderChanged(order.getId()));
         verify(outbox, never()).publish(any(), any());
+    }
+
+    // ---- reservation expiry and the payment that arrives too late -----------------------------------------------------
+
+    @Test
+    void anExpiredReservationCancelsThePendingOrderAndTellsTheCustomer() throws Exception {
+        order.markInventoryReserved();
+
+        listener.onInventoryExpired(json(InventoryExpired.of(order.getId(), "Payment not received within PT30M")));
+
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELLED);
+        assertThat(order.getCancelReason()).contains("Payment not received within PT30M");
+        verify(outbox).publish(eq(Topics.ORDER_CANCELLED), any(OrderCancelled.class));
+    }
+
+    @Test
+    void anExpiryEventForAnOrderThatWasAlreadyConfirmedChangesNothing() throws Exception {
+        order.markInventoryReserved();
+        order.confirm();
+
+        listener.onInventoryExpired(json(InventoryExpired.of(order.getId(), "late")));
+
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.CONFIRMED);
+        verify(outbox, never()).publish(any(), any());
+    }
+
+    @Test
+    void aPaymentThatArrivesAfterTheOrderWasCancelledIsRefundedNotKept() throws Exception {
+        order.cancel("Inventory: Payment not received within PT30M");
+
+        listener.onPaymentAuthorized(json(PaymentAuthorized.of(order.getId(), UUID.randomUUID())));
+
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELLED);   // stays cancelled...
+        var request = org.mockito.ArgumentCaptor.forClass(OrderCancellationRequested.class);
+        verify(outbox).publish(eq(Topics.ORDER_CANCELLATION_REQUESTED), request.capture());   // ...and the refund path starts
+        assertThat(request.getValue().orderId()).isEqualTo(order.getId());
+        assertThat(request.getValue().reason()).contains("after the order was cancelled");
+        assertThat(meters.counter("orders.late_payments_refunded").count()).isEqualTo(1.0);
+        verify(outbox, never()).publish(eq(Topics.ORDER_CONFIRMED), any());
+    }
+
+    @Test
+    void theLateRefundIsNotTriggeredInTheNormalPathOrWhileARefundIsAlreadyRunning() throws Exception {
+        // normal: payment confirms a pending order
+        listener.onPaymentAuthorized(json(PaymentAuthorized.of(order.getId(), UUID.randomUUID())));
+        verify(outbox, never()).publish(eq(Topics.ORDER_CANCELLATION_REQUESTED), any());
+
+        // a customer refund is in flight: a duplicate-looking payment event must not start a second refund
+        order.requestCancellation("Cancelled by customer");
+        listener.onPaymentAuthorized(json(PaymentAuthorized.of(order.getId(), UUID.randomUUID())));
+        verify(outbox, never()).publish(eq(Topics.ORDER_CANCELLATION_REQUESTED), any());
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.REFUND_PENDING);
+    }
+
+    @Test
+    void aRedeliveredLatePaymentStartsOnlyOneRefund() throws Exception {
+        order.cancel("expired");
+        var late = PaymentAuthorized.of(order.getId(), UUID.randomUUID());
+        when(guard.firstTime(late.eventId())).thenReturn(true, false);
+
+        listener.onPaymentAuthorized(json(late));
+        listener.onPaymentAuthorized(json(late));
+
+        verify(outbox, org.mockito.Mockito.times(1)).publish(eq(Topics.ORDER_CANCELLATION_REQUESTED), any());
     }
 
     @Test

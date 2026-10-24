@@ -5,9 +5,11 @@ spring:
   application:
     name: inventory-service
   datasource:
-    url: ${DB_URL:jdbc:postgresql://localhost:5432/inventory}
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/inventory?connectTimeout=3&socketTimeout=15}
     username: ${DB_USER:postgres}
     password: ${DB_PASSWORD:postgres}
+    hikari:
+      connection-timeout: ${DB_CONNECTION_TIMEOUT_MS:3000}   # waiting for a connection beyond this fails the request (503) instead of hanging
   jpa:
     open-in-view: false
     hibernate:
@@ -18,6 +20,8 @@ spring:
     redis:
       host: ${REDIS_HOST:localhost}
       port: 6379
+      timeout: ${REDIS_TIMEOUT:500ms}              # a hung Redis must cost a request half a second, not a minute
+      connect-timeout: ${REDIS_CONNECT_TIMEOUT:500ms}
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP:localhost:9092}
     template:
@@ -66,3 +70,9 @@ security:
   # spring.security.oauth2.resourceserver.jwt.issuer-uri (or jwk-set-uri) instead.
   jwt:
     secret: ${JWT_SECRET:}
+
+inventory:
+  reservation-ttl: ${INVENTORY_RESERVATION_TTL:PT30M}   # unpaid reservations older than this are released (ISO-8601 duration)
+  expiry:
+    enabled: ${INVENTORY_EXPIRY_ENABLED:true}
+    poll-interval-ms: ${INVENTORY_EXPIRY_POLL_MS:30000}

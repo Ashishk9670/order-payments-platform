@@ -5,9 +5,11 @@ spring:
   application:
     name: catalog-service
   datasource:
-    url: ${DB_URL:jdbc:postgresql://localhost:5432/catalog}
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/catalog?connectTimeout=3&socketTimeout=15}
     username: ${DB_USER:postgres}
     password: ${DB_PASSWORD:postgres}
+    hikari:
+      connection-timeout: ${DB_CONNECTION_TIMEOUT_MS:3000}   # waiting for a connection beyond this fails the request (503) instead of hanging
   jpa:
     open-in-view: false
     hibernate:

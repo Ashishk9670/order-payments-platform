@@ -81,4 +81,38 @@ class RedisLockTest {
         assertThat(result).isEqualTo("got it");
         verify(ops, org.mockito.Mockito.times(3)).setIfAbsent(any(), any(), any(Duration.class));
     }
+
+    @Test
+    void whenRedisIsDownReservationsStillRunBecauseTheAtomicUpdateIsTheRealGuard() {
+        when(ops.setIfAbsent(any(), any(), any(Duration.class))).thenThrow(new org.springframework.data.redis.RedisConnectionFailureException("down"));
+        var ran = new java.util.concurrent.atomic.AtomicInteger();
+
+        String result = lock.withLocks(List.of("A", "B"), () -> {
+            ran.incrementAndGet();
+            return "reserved anyway";
+        });
+
+        assertThat(result).isEqualTo("reserved anyway");
+        assertThat(ran.get()).as("the action runs exactly once, not once per lock attempt").isEqualTo(1);
+    }
+
+    @Test
+    void aLockAcquiredBeforeRedisFailedIsStillReleased() {
+        when(ops.setIfAbsent(eq("lock:inventory:A"), any(), any(Duration.class))).thenReturn(true);
+        when(ops.setIfAbsent(eq("lock:inventory:B"), any(), any(Duration.class)))
+                .thenThrow(new org.springframework.data.redis.RedisConnectionFailureException("down"));
+
+        lock.withLocks(List.of("A", "B"), () -> "ok");
+
+        verify(redis).execute(any(RedisScript.class), eq(List.of("lock:inventory:A")), any());
+    }
+
+    @Test
+    void failingToReleaseNeverFailsTheReservation() {
+        when(ops.setIfAbsent(any(), any(), any(Duration.class))).thenReturn(true);
+        when(redis.execute(any(RedisScript.class), any(List.class), any()))
+                .thenThrow(new org.springframework.data.redis.RedisConnectionFailureException("down"));
+
+        assertThat(lock.withLocks(List.of("A"), () -> "done")).isEqualTo("done");
+    }
 }

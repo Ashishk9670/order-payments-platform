@@ -30,7 +30,7 @@ helm.sh/chart: {{ printf "%s-%s" .root.Chart.Name .root.Chart.Version }}
 - { name: OTLP_TRACING_ENDPOINT, value: {{ $v.tracing.otlpEndpoint | quote }} }
 {{- end }}
 {{- if .svc.database }}
-- { name: DB_URL, value: {{ printf "jdbc:postgresql://%s:%v/%s" $v.global.postgres.host $v.global.postgres.port .svc.database | quote }} }
+- { name: DB_URL, value: {{ printf "jdbc:postgresql://%s:%v/%s?%s" $v.global.postgres.host $v.global.postgres.port .svc.database $v.global.postgres.jdbcParams | quote }} }
 - { name: DB_USER, value: {{ $v.global.postgres.user | quote }} }
 - name: DB_PASSWORD
   valueFrom:

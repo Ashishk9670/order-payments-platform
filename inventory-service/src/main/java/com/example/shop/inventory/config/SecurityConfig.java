@@ -30,6 +30,9 @@ public class SecurityConfig {
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(a -> a
                         .requestMatchers(SecuritySupport.OPEN_PATHS).permitAll()
+                        // validation failures and unknown routes are rendered through the container's /error dispatch; if that
+                        // were denied, a 400 would turn into a 403 and hide the real problem from the caller
+                        .requestMatchers("/error").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/inventory/**").hasAnyRole(Roles.ADMIN, Roles.SERVICE)
                         .requestMatchers(HttpMethod.POST, "/api/v1/inventory/**").hasRole(Roles.ADMIN)
                         .anyRequest().denyAll())

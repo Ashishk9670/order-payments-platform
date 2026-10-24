@@ -5,6 +5,7 @@ import static org.awaitility.Awaitility.await;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 
+import com.example.shop.common.events.InventoryExpired;
 import com.example.shop.common.events.InventoryFailed;
 import com.example.shop.common.events.InventoryReserved;
 import com.example.shop.common.events.OrderCancellationRequested;
@@ -201,6 +202,28 @@ class OrderFlowIT {
 
             await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> assertThat(status(id, customer)).isEqualTo("CANCELLED"));
             assertThat(cancelled.awaitKey(id, Duration.ofSeconds(30))).isPresent();
+        }
+    }
+
+    @Test
+    void anExpiredReservationCancelsTheOrderAndALatePaymentIsRefundedAutomatically() throws Exception {
+        String customer = "cust-late-payment";
+        String id = place(customer, null).get("id").asText();
+        UUID orderId = UUID.fromString(id);
+        send(Topics.INVENTORY_RESERVED, id, InventoryReserved.of(orderId, customer, new BigDecimal("30.00")));
+
+        send(Topics.INVENTORY_EXPIRED, id, InventoryExpired.of(orderId, "Payment not received within PT30M"));
+
+        await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> assertThat(status(id, customer)).isEqualTo("CANCELLED"));
+        assertThat(get(id, customer).get("cancelReason").asText()).contains("Payment not received");
+
+        // the payment was in flight and lands after the cancellation: the money must be sent back
+        try (var refunds = new KafkaProbe(bootstrap(), Topics.ORDER_CANCELLATION_REQUESTED)) {
+            send(Topics.PAYMENT_AUTHORIZED, id, PaymentAuthorized.of(orderId, UUID.randomUUID()));
+
+            var request = refunds.awaitKey(id, Duration.ofSeconds(30)).orElseThrow();
+            assertThat(mapper.readValue(request.value(), OrderCancellationRequested.class).reason()).contains("after the order was cancelled");
+            assertThat(status(id, customer)).as("the order stays cancelled, it is never resurrected").isEqualTo("CANCELLED");
         }
     }
 

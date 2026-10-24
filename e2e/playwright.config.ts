@@ -35,6 +35,8 @@ export default defineConfig({
     //   E2E_PSP=1    payment-service uses the HTTP adapter against the WireMock processor (compose profile "psp")
     //   E2E_KEYCLOAK=1  order-service validates Keycloak tokens (docker-compose.keycloak.yml overlay); the dev token endpoint is OFF
     ...(process.env.E2E_KEYCLOAK ? [{ name: 'keycloak', testDir: './tests/keycloak', use: { extraHTTPHeaders: {} } }] : []),
+    //   E2E_CHAOS=1  pauses/stops real containers of the compose stack mid-flow (needs the docker CLI and the stack up)
+    ...(process.env.E2E_CHAOS ? [{ name: 'chaos', testDir: './tests/chaos', workers: 1, timeout: 240_000, expect: { timeout: 90_000 } }] : []),
     ...(process.env.E2E_PSP ? [{ name: 'psp', testDir: './tests/psp', workers: 1 }] : []),
   ],
 });

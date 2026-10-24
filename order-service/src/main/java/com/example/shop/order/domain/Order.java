@@ -146,6 +146,10 @@ public class Order {
         return cancelReason;
     }
 
+    public Instant getUpdatedAt() {
+        return updatedAt;
+    }
+
     public Instant getCreatedAt() {
         return createdAt;
     }

@@ -16,6 +16,10 @@ public interface OrderRepository extends JpaRepository<Order, UUID> {
 
     List<Order> findByCustomerIdOrderByCreatedAtDesc(String customerId, Pageable pageable);
 
+    long countByStatusAndUpdatedAtBefore(OrderStatus status, java.time.Instant before);
+
+    List<Order> findByStatusInAndUpdatedAtBeforeOrderByUpdatedAtAsc(java.util.Collection<OrderStatus> statuses, java.time.Instant before, Pageable pageable);
+
     record ItemRow(UUID orderId, String sku, int quantity, java.math.BigDecimal unitPrice) {
     }
 

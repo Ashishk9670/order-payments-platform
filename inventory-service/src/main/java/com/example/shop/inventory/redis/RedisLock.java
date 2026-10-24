@@ -6,6 +6,9 @@ import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 import java.util.function.Supplier;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataAccessException;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Component;
@@ -16,6 +19,8 @@ import org.springframework.stereotype.Component;
  */
 @Component
 public class RedisLock {
+
+    private static final Logger log = LoggerFactory.getLogger(RedisLock.class);
 
     private static final Duration LEASE = Duration.ofSeconds(10);
     private static final Duration WAIT = Duration.ofSeconds(5);
@@ -37,9 +42,27 @@ public class RedisLock {
                 acquire(key, token);
                 held.add(key);
             }
+        } catch (DataAccessException e) {
+            // The lock only reduces contention; the atomic conditional UPDATE is what prevents overselling. So a Redis outage
+            // must not stop reservations: carry on without the lock.
+            log.warn("Redis unavailable, reserving without the stock lock: {}", e.toString());
+            releaseQuietly(held, token);
+            return action.get();
+        }
+        try {
             return action.get();
         } finally {
-            held.forEach(k -> redis.execute(RELEASE, List.of(k), token));
+            releaseQuietly(held, token);
+        }
+    }
+
+    private void releaseQuietly(List<String> held, String token) {
+        for (String key : held) {
+            try {
+                redis.execute(RELEASE, List.of(key), token);
+            } catch (DataAccessException e) {
+                log.warn("Could not release {} (it expires by itself): {}", key, e.toString());   // lease is 10 s
+            }
         }
     }
 

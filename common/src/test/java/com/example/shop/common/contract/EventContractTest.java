@@ -3,6 +3,7 @@ package com.example.shop.common.contract;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.example.shop.common.events.DomainEvent;
+import com.example.shop.common.events.InventoryExpired;
 import com.example.shop.common.events.InventoryFailed;
 import com.example.shop.common.events.InventoryReserved;
 import com.example.shop.common.events.OrderCancellationRequested;
@@ -58,7 +59,8 @@ class EventContractTest {
                 OrderCancelled.of(ORDER, "cust", "because"),
                 OrderCancellationRequested.of(ORDER, "changed my mind"),
                 PaymentRefunded.of(ORDER, UUID.randomUUID()),
-                PaymentRefundFailed.of(ORDER, "psp down"));
+                PaymentRefundFailed.of(ORDER, "psp down"),
+                InventoryExpired.of(ORDER, "Reservation expired"));
     }
 
     private static JsonNode load(String resource) throws Exception {

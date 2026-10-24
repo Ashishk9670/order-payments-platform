@@ -57,7 +57,7 @@ services:
     environment:
       TRACING_SAMPLING: ${TRACING_SAMPLING:-0.0}      # tracing is off unless the observability profile is used (see below)
       OTLP_TRACING_ENDPOINT: http://jaeger:4318/v1/traces
-      DB_URL: jdbc:postgresql://postgres:5432/orders
+      DB_URL: jdbc:postgresql://postgres:5432/orders?connectTimeout=3&socketTimeout=15
       KAFKA_BOOTSTRAP: kafka:19092
       REDIS_HOST: redis
       RATELIMIT_REQUESTS_PER_MINUTE: ${RATE_LIMIT:-120}
@@ -79,7 +79,7 @@ services:
       JWT_SECRET: ${JWT_SECRET:-dev-only-secret-dev-only-secret-0123456789}   # DEV/CI ONLY
       TRACING_SAMPLING: ${TRACING_SAMPLING:-0.0}      # tracing is off unless the observability profile is used (see below)
       OTLP_TRACING_ENDPOINT: http://jaeger:4318/v1/traces
-      DB_URL: jdbc:postgresql://postgres:5432/inventory
+      DB_URL: jdbc:postgresql://postgres:5432/inventory?connectTimeout=3&socketTimeout=15
       KAFKA_BOOTSTRAP: kafka:19092
       REDIS_HOST: redis
     depends_on: *infra
@@ -92,7 +92,7 @@ services:
       JWT_SECRET: ${JWT_SECRET:-dev-only-secret-dev-only-secret-0123456789}   # DEV/CI ONLY
       TRACING_SAMPLING: ${TRACING_SAMPLING:-0.0}      # tracing is off unless the observability profile is used (see below)
       OTLP_TRACING_ENDPOINT: http://jaeger:4318/v1/traces
-      DB_URL: jdbc:postgresql://postgres:5432/payments
+      DB_URL: jdbc:postgresql://postgres:5432/payments?connectTimeout=3&socketTimeout=15
       PAYMENT_GATEWAY: ${PAYMENT_GATEWAY:-simulated}      # simulated | http (then PSP_URL below is used)
       PSP_URL: ${PSP_URL:-http://psp-mock:8080}
       KAFKA_BOOTSTRAP: kafka:19092
@@ -134,7 +134,7 @@ services:
       JWT_SECRET: ${JWT_SECRET:-dev-only-secret-dev-only-secret-0123456789}   # DEV/CI ONLY
       TRACING_SAMPLING: ${TRACING_SAMPLING:-0.0}      # tracing is off unless the observability profile is used (see below)
       OTLP_TRACING_ENDPOINT: http://jaeger:4318/v1/traces
-      DB_URL: jdbc:postgresql://postgres:5432/catalog
+      DB_URL: jdbc:postgresql://postgres:5432/catalog?connectTimeout=3&socketTimeout=15
     depends_on:
       postgres: { condition: service_healthy }
 

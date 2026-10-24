@@ -7,6 +7,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.example.shop.common.events.OrderCreated;
+import com.example.shop.common.events.PaymentAuthorized;
 import com.example.shop.common.events.PaymentFailed;
 import com.example.shop.common.events.PaymentRefunded;
 import com.example.shop.inventory.domain.ReservationService;
@@ -69,5 +70,16 @@ class InventoryListenerTest {
         assertThatThrownBy(() -> listener.onOrderCreated("{nope")).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> listener.onPaymentFailed("{nope")).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> listener.onPaymentRefunded("{nope")).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void anAuthorizedPaymentCommitsTheReservation() throws Exception {
+        var paid = PaymentAuthorized.of(UUID.randomUUID(), UUID.randomUUID());
+
+        listener.onPaymentAuthorized(mapper.writeValueAsString(paid));
+
+        verify(service).commit(paid);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> listener.onPaymentAuthorized("{nope"))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 }

@@ -8,6 +8,8 @@ spring:
     redis:
       host: ${REDIS_HOST:localhost}
       port: 6379
+      timeout: ${REDIS_TIMEOUT:500ms}              # a hung Redis must cost a request half a second, not a minute
+      connect-timeout: ${REDIS_CONNECT_TIMEOUT:500ms}
 
 gateway:
   order-service-url: ${ORDER_SERVICE_URL:http://localhost:8081}

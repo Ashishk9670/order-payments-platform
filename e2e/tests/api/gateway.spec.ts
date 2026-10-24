@@ -73,7 +73,7 @@ test.describe('api gateway', () => {
   test('rate limiting is per caller: a flooding client is throttled while others are unaffected', async ({ playwright, request }) => {
     // stacks started with a raised gateway burst (load or Kubernetes runs) cannot be throttled by design
     test.skip(!!process.env.E2E_SKIP_GATEWAY_RATELIMIT, 'gateway burst was raised for this environment');
-    const flooder = await gw(playwright, { Authorization: `Bearer flood-${uid('x')}` });   // key = hash of this header
+    const flooder = await gw(playwright, { Authorization: `Bearer ${await tokenFor(request, uid('flood'))}` });   // key = hash of this header
     const results = await Promise.all(Array.from({ length: 400 }, () => flooder.get('/api/v1/products')));
     const codes = results.map((r) => r.status());
 

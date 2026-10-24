@@ -3,6 +3,8 @@ package com.example.shop.order.redis;
 import java.time.Duration;
 import java.util.Optional;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
@@ -12,6 +14,8 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class IdempotencyService {
+
+    private static final Logger log = LoggerFactory.getLogger(IdempotencyService.class);
 
     private static final String PENDING = "PENDING";
     private static final Duration TTL = Duration.ofHours(24);
@@ -34,25 +38,39 @@ public class IdempotencyService {
         }
     }
 
+    /** @throws IdempotencyUnavailableException when Redis cannot be reached: better to refuse than to risk a duplicate order. */
     public Claim claim(String key) {
         String redisKey = redisKey(key);
-        Boolean acquired = redis.opsForValue().setIfAbsent(redisKey, PENDING, PENDING_TTL);
-        if (Boolean.TRUE.equals(acquired)) {
-            return new Claim.Acquired();
+        try {
+            Boolean acquired = redis.opsForValue().setIfAbsent(redisKey, PENDING, PENDING_TTL);
+            if (Boolean.TRUE.equals(acquired)) {
+                return new Claim.Acquired();
+            }
+            String value = redis.opsForValue().get(redisKey);
+            if (value == null || PENDING.equals(value)) {
+                return new Claim.InFlight();
+            }
+            return new Claim.Completed(UUID.fromString(value));
+        } catch (org.springframework.dao.DataAccessException e) {
+            throw new IdempotencyUnavailableException(e);
         }
-        String value = redis.opsForValue().get(redisKey);
-        if (value == null || PENDING.equals(value)) {
-            return new Claim.InFlight();
-        }
-        return new Claim.Completed(UUID.fromString(value));
     }
 
+    /** The order already exists at this point, so a Redis failure only means a retry will not be recognised as a replay. */
     public void complete(String key, UUID orderId) {
-        redis.opsForValue().set(redisKey(key), orderId.toString(), TTL);
+        try {
+            redis.opsForValue().set(redisKey(key), orderId.toString(), TTL);
+        } catch (org.springframework.dao.DataAccessException e) {
+            log.warn("Could not record the result of idempotency key (order {} exists): {}", orderId, e.toString());
+        }
     }
 
     public void release(String key) {
-        redis.delete(redisKey(key));
+        try {
+            redis.delete(redisKey(key));
+        } catch (org.springframework.dao.DataAccessException e) {
+            log.warn("Could not release an idempotency key; it expires on its own: {}", e.toString());
+        }
     }
 
     public Optional<UUID> find(String key) {

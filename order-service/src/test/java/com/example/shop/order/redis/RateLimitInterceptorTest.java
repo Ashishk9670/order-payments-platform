@@ -57,4 +57,12 @@ class RateLimitInterceptorTest {
                 .isInstanceOf(RateLimitExceededException.class);
         assertThat(response.getHeader("Retry-After")).isEqualTo("60");
     }
+
+    @Test
+    void whenRedisIsDownTheLimiterLetsRequestsThroughInsteadOfBecomingAnOutage() {
+        when(ops.increment(anyString())).thenThrow(new org.springframework.data.redis.RedisConnectionFailureException("down"));
+        var interceptor = new RateLimitInterceptor(redis, 3);
+
+        assertThat(interceptor.preHandle(new MockHttpServletRequest(), new MockHttpServletResponse(), new Object())).isTrue();
+    }
 }

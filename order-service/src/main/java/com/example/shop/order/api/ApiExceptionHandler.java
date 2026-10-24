@@ -38,6 +38,22 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
         return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, detail);
     }
 
+    @ExceptionHandler(com.example.shop.order.redis.IdempotencyUnavailableException.class)
+    ProblemDetail idempotencyUnavailable(com.example.shop.order.redis.IdempotencyUnavailableException e) {
+        var problem = ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE,
+                "Idempotency cannot be guaranteed right now; retry shortly (or send the request without an Idempotency-Key at your own risk of a duplicate)");
+        return problem;
+    }
+
+    /** The database cannot be reached (or a connection could not be obtained in time): a temporary condition, so say so. */
+    @ExceptionHandler({org.springframework.transaction.CannotCreateTransactionException.class,
+            org.springframework.dao.DataAccessResourceFailureException.class,
+            org.springframework.jdbc.CannotGetJdbcConnectionException.class})
+    org.springframework.http.ResponseEntity<ProblemDetail> databaseUnavailable(RuntimeException e) {
+        return org.springframework.http.ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).header("Retry-After", "5")
+                .body(ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE, "The service is temporarily unavailable, retry shortly"));
+    }
+
     @ExceptionHandler(RateLimitExceededException.class)
     ProblemDetail tooMany(RateLimitExceededException e) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.TOO_MANY_REQUESTS, e.getMessage());

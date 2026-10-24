@@ -2,6 +2,8 @@ package com.example.shop.order.saga;
 
 import com.example.shop.order.api.OrderChanged;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.cache.CacheManager;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
@@ -11,6 +13,8 @@ import org.springframework.transaction.event.TransactionalEventListener;
 @Component
 class OrderCacheEvictor {
 
+    private static final Logger log = LoggerFactory.getLogger(OrderCacheEvictor.class);
+
     private final CacheManager cacheManager;
 
     OrderCacheEvictor(CacheManager cacheManager) {
@@ -19,9 +23,14 @@ class OrderCacheEvictor {
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     void on(OrderChanged event) {
-        var cache = cacheManager.getCache("orders");
-        if (cache != null) {
-            cache.evict(event.orderId());
+        try {
+            var cache = cacheManager.getCache("orders");
+            if (cache != null) {
+                cache.evict(event.orderId());
+            }
+        } catch (RuntimeException e) {
+            // the entry expires on its own within the cache TTL; failing the already-committed transaction callback helps no one
+            log.warn("Could not evict order {} from the cache (it will expire on its own): {}", event.orderId(), e.toString());
         }
     }
 }

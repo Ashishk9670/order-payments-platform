@@ -32,6 +32,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(a -> a
                         .requestMatchers("/", "/index.html", "/favicon.ico", "/graphiql/**", "/dev/token").permitAll()
                         .requestMatchers(SecuritySupport.OPEN_PATHS).permitAll()
+                        .requestMatchers("/error").permitAll()   // error dispatch must not turn a 4xx into a 401/403
                         .requestMatchers("/api/v1/admin/**").hasRole(Roles.ADMIN)
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(o -> o

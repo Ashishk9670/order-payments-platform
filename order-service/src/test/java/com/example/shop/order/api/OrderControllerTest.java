@@ -278,4 +278,35 @@ class OrderControllerTest {
         }
         verify(idempotency).release("cust-1:k1");
     }
+
+    @Test
+    void whenTheIdempotencyStoreIsDownARequestWithAKeyIs503ProblemJson() throws Exception {
+        when(idempotency.claim("cust-1:k1")).thenThrow(new com.example.shop.order.redis.IdempotencyUnavailableException(new RuntimeException("redis down")));
+
+        mvc.perform(post("/api/v1/orders").with(as("cust-1")).header("Idempotency-Key", "k1")
+                        .contentType(MediaType.APPLICATION_JSON).content(VALID))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(header().string("Content-Type", "application/problem+json"));
+        verify(placement, never()).place(any());   // nothing was created that a retry could then duplicate
+    }
+
+    @Test
+    void aRequestWithoutAKeyNeverTouchesTheIdempotencyStore() throws Exception {
+        when(placement.place(any())).thenReturn(view);
+
+        mvc.perform(post("/api/v1/orders").with(as("cust-1")).contentType(MediaType.APPLICATION_JSON).content(VALID))
+                .andExpect(status().isAccepted());
+
+        org.mockito.Mockito.verifyNoInteractions(idempotency);
+    }
+
+    @Test
+    void aDatabaseOutageIsA503WithRetryAfterNotAnOpaque500() throws Exception {
+        when(placement.place(any())).thenThrow(new org.springframework.transaction.CannotCreateTransactionException("db down"));
+
+        mvc.perform(post("/api/v1/orders").with(as("cust-1")).contentType(MediaType.APPLICATION_JSON).content(VALID))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(header().string("Retry-After", "5"))
+                .andExpect(header().string("Content-Type", "application/problem+json"));
+    }
 }
