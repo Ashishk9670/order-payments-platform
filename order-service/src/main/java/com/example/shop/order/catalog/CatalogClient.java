@@ -1,5 +1,6 @@
 package com.example.shop.order.catalog;
 
+import com.example.shop.order.security.ServiceTokens;
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.decorators.Decorators;
@@ -34,11 +35,29 @@ public class CatalogClient {
 
     public CatalogClient(@Value("${catalog.url}") String baseUrl,
                          @Value("${catalog.timeout-ms:2000}") int timeoutMs,
-                         CircuitBreaker catalogCircuitBreaker, Retry catalogRetry) {
+                         CircuitBreaker catalogCircuitBreaker, Retry catalogRetry, ServiceTokens tokens) {
         var factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(Duration.ofMillis(timeoutMs));
         factory.setReadTimeout(Duration.ofMillis(timeoutMs));
-        this.http = RestClient.builder().baseUrl(baseUrl).requestFactory(factory).build();
+        this.http = RestClient.builder().baseUrl(baseUrl).requestFactory(factory)
+                .requestInterceptor((request, body, execution) -> {
+                    String token;
+                    try {
+                        token = tokens.bearer();
+                    } catch (RuntimeException e) {
+                        // an IOException becomes a ResourceAccessException: transient, so retried and counted by the breaker
+                        throw new java.io.IOException("could not obtain a service token", e);
+                    }
+                    if (token != null) {
+                        request.getHeaders().setBearerAuth(token);
+                    }
+                    var response = execution.execute(request, body);
+                    if (response.getStatusCode().value() == 401) {
+                        tokens.invalidate();   // expired or rotated: the next attempt fetches a fresh token
+                    }
+                    return response;
+                })
+                .build();
         this.breaker = catalogCircuitBreaker;
         this.retry = catalogRetry;
     }

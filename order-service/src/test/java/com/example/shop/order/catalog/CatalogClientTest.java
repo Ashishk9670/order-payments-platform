@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.example.shop.order.catalog.CatalogUnavailableException;
+import com.example.shop.order.security.ServiceTokens;
 import com.sun.net.httpserver.HttpServer;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
@@ -21,12 +22,28 @@ class CatalogClientTest {
     HttpServer server;
     AtomicInteger flakyHits = new AtomicInteger();
     AtomicInteger downHits = new AtomicInteger();
+    final java.util.List<String> authHeaders = new java.util.concurrent.CopyOnWriteArrayList<>();
+    final AtomicInteger invalidations = new AtomicInteger();
+    volatile String token = "svc-token";
+
+    private final ServiceTokens tokens = new ServiceTokens() {
+        @Override public String bearer() { return token; }
+        @Override public void invalidate() { invalidations.incrementAndGet(); }
+    };
     CircuitBreaker breaker;
     CatalogClient client;
 
     @BeforeEach
     void start() throws IOException {
         server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/api/v1/products/SECURED", ex -> {
+            authHeaders.add(String.valueOf(ex.getRequestHeaders().getFirst("Authorization")));
+            if ("Bearer svc-token".equals(ex.getRequestHeaders().getFirst("Authorization"))) {
+                reply(ex, 200, "{\"sku\":\"SECURED\",\"name\":\"s\",\"price\":7.00}");
+            } else {
+                reply(ex, 401, "{}");
+            }
+        });
         server.createContext("/api/v1/products/OK", ex -> reply(ex, 200, "{\"sku\":\"OK\",\"name\":\"Fine\",\"price\":12.34}"));
         server.createContext("/api/v1/products/NOPE", ex -> reply(ex, 404, "{\"detail\":\"Unknown product NOPE\"}"));
         server.createContext("/api/v1/products/FLAKY", ex -> {
@@ -46,7 +63,7 @@ class CatalogClientTest {
 
         var resilience = new ResilienceConfig();
         breaker = resilience.catalogCircuitBreaker(CircuitBreakerRegistry.ofDefaults());
-        client = new CatalogClient("http://127.0.0.1:" + server.getAddress().getPort(), 1000, breaker, resilience.catalogRetry());
+        client = new CatalogClient("http://127.0.0.1:" + server.getAddress().getPort(), 1000, breaker, resilience.catalogRetry(), tokens);
     }
 
     @AfterEach
@@ -102,5 +119,30 @@ class CatalogClientTest {
     @Test
     void listsProducts() {
         assertThat(client.list()).extracting(CatalogClient.ProductDto::sku).containsExactly("A", "B");
+    }
+
+    @Test
+    void everyRequestCarriesTheServiceToken() {
+        assertThat(client.priceOf("SECURED")).isEqualByComparingTo("7.00");
+        assertThat(authHeaders).containsExactly("Bearer svc-token");
+    }
+
+    @Test
+    void aRejectedTokenIsInvalidatedSoTheNextCallFetchesAFreshOneAndTheOutageIsReportedHonestly() {
+        token = "stale";
+
+        assertThatThrownBy(() -> client.priceOf("SECURED")).isInstanceOf(CatalogUnavailableException.class);
+
+        assertThat(invalidations.get()).isEqualTo(1);
+        token = "svc-token";    // as a refreshed token would be
+        assertThat(client.priceOf("SECURED")).isEqualByComparingTo("7.00");
+    }
+
+    @Test
+    void noTokenMeansNoAuthorizationHeader() {
+        token = null;
+
+        assertThatThrownBy(() -> client.priceOf("SECURED")).isInstanceOf(CatalogUnavailableException.class);
+        assertThat(authHeaders).containsExactly("null");
     }
 }

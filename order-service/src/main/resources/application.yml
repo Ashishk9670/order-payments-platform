@@ -75,6 +75,12 @@ security:
   # spring.security.oauth2.resourceserver.jwt.issuer-uri (e.g. Keycloak) instead.
   jwt:
     secret: ${JWT_SECRET:}
+  # How this service authenticates to the catalog. Dev: leave empty, it signs a SERVICE token with the shared secret.
+  # Production: the identity provider's token endpoint; the client's service account needs the SERVICE role.
+  service-account:
+    token-uri: ${SERVICE_ACCOUNT_TOKEN_URI:}
+    client-id: ${SERVICE_ACCOUNT_CLIENT_ID:order-service}
+    client-secret: ${SERVICE_ACCOUNT_CLIENT_SECRET:}
   customer-id-claim: ${CUSTOMER_ID_CLAIM:sub}
   dev-token:
     enabled: ${DEV_TOKEN_ENABLED:false}   # DEV/CI ONLY: POST /dev/token mints tokens

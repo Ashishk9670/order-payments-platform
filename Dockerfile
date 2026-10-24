@@ -3,6 +3,7 @@ FROM maven:3.9-eclipse-temurin-21 AS build
 WORKDIR /src
 COPY pom.xml .
 COPY common/pom.xml common/
+COPY platform-security/pom.xml platform-security/
 COPY order-service/pom.xml order-service/
 COPY inventory-service/pom.xml inventory-service/
 COPY payment-service/pom.xml payment-service/

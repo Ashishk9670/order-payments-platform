@@ -15,6 +15,7 @@ spring:
       value-serializer: org.apache.kafka.common.serialization.StringSerializer
     consumer:
       auto-offset-reset: earliest
+      enable-auto-commit: false   # the DLT admin tool commits explicitly
       properties:
         # notice topics created by another service within seconds, not the 5-minute default
         metadata.max.age.ms: 10000
@@ -42,3 +43,9 @@ management:
     health:
       probes:
         enabled: true
+
+security:
+  # HS256 shared secret for local/dev/CI. In production leave it empty and set
+  # spring.security.oauth2.resourceserver.jwt.issuer-uri (or jwk-set-uri) instead.
+  jwt:
+    secret: ${JWT_SECRET:}

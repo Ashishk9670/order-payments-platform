@@ -1,8 +1,10 @@
 package com.example.shop.common.kafka;
 
 import com.example.shop.common.events.Topics;
+import io.micrometer.core.instrument.MeterRegistry;
 import java.util.stream.Stream;
 import org.apache.kafka.common.TopicPartition;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.kafka.config.TopicBuilder;
@@ -17,10 +19,18 @@ public class KafkaCommonConfig {
 
     /** Retry with backoff (1s, 2s, 4s ...) then park the record on "<topic>.DLT" so the partition is never blocked. */
     @Bean
-    public DefaultErrorHandler kafkaErrorHandler(KafkaOperations<Object, Object> template) {
+    public DefaultErrorHandler kafkaErrorHandler(KafkaOperations<Object, Object> template, ObjectProvider<MeterRegistry> meters) {
         // partition -1: let the producer pick, so the DLT needs no matching partition count
-        var recoverer = new DeadLetterPublishingRecoverer(template,
+        var deadLetters = new DeadLetterPublishingRecoverer(template,
                 (record, ex) -> new TopicPartition(record.topic() + ".DLT", -1));
+        MeterRegistry registry = meters.getIfAvailable();
+        // every parked record is counted per source topic: a non-zero rate is an alert (see docs/runbooks/dead-letters.md)
+        org.springframework.kafka.listener.ConsumerRecordRecoverer recoverer = (record, ex) -> {
+            if (registry != null) {
+                registry.counter("dead_letter.records", "topic", record.topic()).increment();
+            }
+            deadLetters.accept(record, ex);
+        };
         var backOff = new ExponentialBackOff(1_000L, 2.0);
         backOff.setMaxElapsedTime(15_000L);
         var handler = new DefaultErrorHandler(recoverer, backOff);

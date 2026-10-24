@@ -20,10 +20,19 @@ import org.springframework.boot.autoconfigure.kafka.KafkaConnectionDetails;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.context.annotation.Import;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
+import org.springframework.security.oauth2.jwt.JwsHeader;
+import org.springframework.security.oauth2.jwt.JwtClaimsSet;
+import org.springframework.security.oauth2.jwt.JwtEncoder;
+import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
 import org.springframework.kafka.core.KafkaTemplate;
 
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+        properties = "security.jwt.secret=integration-test-secret-integration-test-0123456789")
 @Import(Containers.class)
 class PaymentFlowIT {
 
@@ -31,6 +40,19 @@ class PaymentFlowIT {
     @Autowired KafkaConnectionDetails kafkaDetails;
     @Autowired TestRestTemplate http;
     @Autowired ObjectMapper mapper;
+    @Autowired JwtEncoder jwtEncoder;
+
+    private HttpEntity<Void> as(String role) {
+        var now = java.time.Instant.now();
+        var claims = JwtClaimsSet.builder().subject("it").issuedAt(now).expiresAt(now.plusSeconds(300)).claim("roles", java.util.List.of(role)).build();
+        var headers = new HttpHeaders();
+        headers.setBearerAuth(jwtEncoder.encode(JwtEncoderParameters.from(JwsHeader.with(MacAlgorithm.HS256).build(), claims)).getTokenValue());
+        return new HttpEntity<>(headers);
+    }
+
+    private JsonNode paymentOf(Object orderId) {
+        return http.exchange("/api/v1/payments/order/" + orderId, HttpMethod.GET, as("ADMIN"), JsonNode.class).getBody();
+    }
 
     private void send(InventoryReserved e) throws Exception {
         kafka.send(Topics.INVENTORY_RESERVED, e.orderId().toString(), mapper.writeValueAsString(e)).get();
@@ -43,7 +65,7 @@ class PaymentFlowIT {
             send(event);
             assertThat(probe.awaitKey(event.orderId().toString(), Duration.ofSeconds(20))).isPresent();
         }
-        JsonNode payment = http.getForObject("/api/v1/payments/order/" + event.orderId(), JsonNode.class);
+        JsonNode payment = paymentOf(event.orderId());
         assertThat(payment.get("status").asText()).isEqualTo("AUTHORIZED");
         assertThat(payment.get("amount").decimalValue()).isEqualByComparingTo("42.00");
     }
@@ -56,7 +78,7 @@ class PaymentFlowIT {
             var record = probe.awaitKey(event.orderId().toString(), Duration.ofSeconds(20)).orElseThrow();
             assertThat(mapper.readValue(record.value(), PaymentFailed.class).reason()).contains("limit");
         }
-        JsonNode payment = http.getForObject("/api/v1/payments/order/" + event.orderId(), JsonNode.class);
+        JsonNode payment = paymentOf(event.orderId());
         assertThat(payment.get("status").asText()).isEqualTo("FAILED");
     }
 
@@ -72,8 +94,19 @@ class PaymentFlowIT {
 
     @Test
     void unknownOrderHasNoPayment() {
-        var response = http.getForEntity("/api/v1/payments/order/" + UUID.randomUUID(), String.class);
+        var response = http.exchange("/api/v1/payments/order/" + UUID.randomUUID(), HttpMethod.GET, as("ADMIN"), String.class);
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+    }
+
+    @Test
+    void theApiRequiresAnAdminOrServiceToken() {
+        var orderId = UUID.randomUUID();
+
+        assertThat(http.getForEntity("/api/v1/payments/order/" + orderId, String.class).getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(http.exchange("/api/v1/payments/order/" + orderId, HttpMethod.GET, as("CUSTOMER"), String.class).getStatusCode())
+                .isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(http.exchange("/api/v1/payments/order/" + orderId, HttpMethod.GET, as("SERVICE"), String.class).getStatusCode())
+                .isEqualTo(HttpStatus.NOT_FOUND);   // allowed in: it just has no payment
     }
 
     @Test
@@ -91,7 +124,7 @@ class PaymentFlowIT {
 
             assertThat(refunded.collect(key, Duration.ofSeconds(10))).hasSize(1);
         }
-        JsonNode payment = http.getForObject("/api/v1/payments/order/" + reserved.orderId(), JsonNode.class);
+        JsonNode payment = paymentOf(reserved.orderId());
         assertThat(payment.get("status").asText()).isEqualTo("REFUNDED");
     }
 

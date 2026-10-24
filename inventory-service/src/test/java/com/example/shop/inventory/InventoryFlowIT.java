@@ -25,7 +25,8 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.kafka.core.KafkaTemplate;
 
-@SpringBootTest(properties = "spring.kafka.listener.concurrency=3")
+@SpringBootTest(properties = {"spring.kafka.listener.concurrency=3",
+        "security.jwt.secret=integration-test-secret-integration-test-0123456789"})
 @Import(Containers.class)
 class InventoryFlowIT {
 

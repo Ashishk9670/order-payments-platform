@@ -32,6 +32,7 @@ jobs:
     timeout-minutes: 45
     env:
       E2E_SKIP_GATEWAY_RATELIMIT: "1"     # the chart values raise the burst for the test run
+      E2E_JWT_SECRET: ci-kind-secret-ci-kind-secret-0123456789   # the secret created for the cluster below
     steps:
       - uses: actions/checkout@v4
 

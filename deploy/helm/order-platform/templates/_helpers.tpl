@@ -41,6 +41,19 @@ helm.sh/chart: {{ printf "%s-%s" .root.Chart.Name .root.Chart.Version }}
 - { name: KAFKA_BOOTSTRAP, value: {{ $v.global.kafka.bootstrapServers | quote }} }
 {{- end }}
 {{- end }}
+{{- if ne .name "api-gateway" }}
+{{- if $v.security.issuerUri }}
+- { name: SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI, value: {{ $v.security.issuerUri | quote }} }
+{{- end }}
+{{- if $v.security.jwkSetUri }}
+- { name: SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI, value: {{ $v.security.jwkSetUri | quote }} }
+{{- end }}
+{{- if $v.security.jwt.existingSecret }}
+- name: JWT_SECRET
+  valueFrom:
+    secretKeyRef: { name: {{ $v.security.jwt.existingSecret }}, key: {{ $v.security.jwt.secretKey }} }
+{{- end }}
+{{- end }}
 {{- if or (eq .name "order-service") (eq .name "inventory-service") (eq .name "api-gateway") }}
 - { name: REDIS_HOST, value: {{ $v.global.redis.host | quote }} }
 {{- end }}
@@ -54,13 +67,12 @@ helm.sh/chart: {{ printf "%s-%s" .root.Chart.Name .root.Chart.Version }}
 - { name: RATELIMIT_REQUESTS_PER_MINUTE, value: {{ $v.rateLimit.orderServicePerIpPerMinute | int64 | quote }} }
 - { name: CUSTOMER_ID_CLAIM, value: {{ $v.security.customerIdClaim | quote }} }
 - { name: DEV_TOKEN_ENABLED, value: {{ $v.security.devTokenEnabled | quote }} }
-{{- if $v.security.issuerUri }}
-- { name: SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI, value: {{ $v.security.issuerUri | quote }} }
-{{- end }}
-{{- if $v.security.jwt.existingSecret }}
-- name: JWT_SECRET
+{{- if $v.security.serviceAccount.tokenUri }}
+- { name: SERVICE_ACCOUNT_TOKEN_URI, value: {{ $v.security.serviceAccount.tokenUri | quote }} }
+- { name: SERVICE_ACCOUNT_CLIENT_ID, value: {{ $v.security.serviceAccount.clientId | quote }} }
+- name: SERVICE_ACCOUNT_CLIENT_SECRET
   valueFrom:
-    secretKeyRef: { name: {{ $v.security.jwt.existingSecret }}, key: {{ $v.security.jwt.secretKey }} }
+    secretKeyRef: { name: {{ required "security.serviceAccount.existingSecret is required with a tokenUri" $v.security.serviceAccount.existingSecret }}, key: {{ $v.security.serviceAccount.secretKey }} }
 {{- end }}
 {{- end }}
 {{- if eq .name "payment-service" }}

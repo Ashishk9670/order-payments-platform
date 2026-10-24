@@ -10,7 +10,7 @@ export default async function globalSetup() {
   if (!t.ok()) throw new Error(`Cannot mint an e2e admin token: ${t.status()} (is DEV_TOKEN_ENABLED=true?)`);
   process.env.E2E_ADMIN_TOKEN = (await t.json()).token;   // inherited by the worker processes
   for (const sku of ['SKU-1001', 'SKU-1002', 'SKU-LUXURY']) {
-    const r = await ctx.post(`${URLS.inventory}/api/v1/inventory/${sku}/restock`, { data: { quantity: 1000 } });
+    const r = await ctx.post(`${URLS.inventory}/api/v1/inventory/${sku}/restock`, { data: { quantity: 1000 }, headers: { Authorization: `Bearer ${process.env.E2E_ADMIN_TOKEN}` } });
     if (!r.ok()) throw new Error(`Cannot restock ${sku}: ${r.status()} (is the stack up?)`);
   }
   await ctx.dispose();

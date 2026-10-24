@@ -74,3 +74,20 @@ test('a Keycloak token works through the gateway, including the GraphQL endpoint
   });
   expect((await forbidden.json()).errors[0].extensions.classification).toBe('FORBIDDEN');
 });
+
+test('internal APIs accept a Keycloak admin, refuse a Keycloak customer, and the order service reaches the catalog as a service account', async ({ request }) => {
+  const [alice, ops] = await Promise.all([login(request, 'alice'), login(request, 'ops')]);
+  const inventory = `${URLS.inventory}/api/v1/inventory/SKU-1002`;
+  const catalog = `${URLS.catalog}/api/v1/products`;
+
+  expect((await request.get(inventory)).status()).toBe(401);                       // no token
+  expect((await request.get(inventory, { headers: as(alice) })).status()).toBe(403);  // customer
+  expect((await request.get(inventory, { headers: as(ops) })).status()).toBe(200);    // operator (realm role "admin")
+  expect((await request.get(catalog, { headers: as(alice) })).status()).toBe(403);
+  expect((await request.get(catalog, { headers: as(ops) })).status()).toBe(200);
+
+  // order placement needs prices: the order service fetched them from the catalog with a client-credentials token
+  const placed = await request.post(`${URLS.order}/api/v1/orders`, { headers: as(alice), data: order('alice') });
+  expect(placed.status()).toBe(202);
+  expect((await placed.json()).totalAmount).toBeGreaterThan(0);
+});

@@ -62,11 +62,13 @@ export function setup() {
   // a short-lived admin token (dev/CI only: needs DEV_TOKEN_ENABLED=true on the order service)
   const t = http.post(`${ORDER_URL}/dev/token`, JSON.stringify({ customerId: 'k6-admin', admin: true }), json);
   if (t.status !== 200) throw new Error(`cannot get a token (${t.status}); is DEV_TOKEN_ENABLED=true?`);
+  // the catalog and inventory admin APIs are internal and need that admin token
+  const admin = { headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${t.json('token')}` } };
 
   // one product with effectively unlimited stock, so the test measures throughput rather than "sold out"
   const sku = `LOAD-${Date.now()}`;
-  const p = http.put(`${CATALOG_URL}/api/v1/products/${sku}`, JSON.stringify({ name: 'Load test item', price: 5 }), json);
-  const s = http.post(`${INVENTORY_URL}/api/v1/inventory/${sku}/restock`, JSON.stringify({ quantity: 10000000 }), json);
+  const p = http.put(`${CATALOG_URL}/api/v1/products/${sku}`, JSON.stringify({ name: 'Load test item', price: 5 }), admin);
+  const s = http.post(`${INVENTORY_URL}/api/v1/inventory/${sku}/restock`, JSON.stringify({ quantity: 10000000 }), admin);
   if (p.status >= 300 || s.status >= 300) throw new Error(`cannot create the test product (${p.status}/${s.status})`);
 
   return { token: t.json('token'), sku };

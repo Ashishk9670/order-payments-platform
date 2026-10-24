@@ -47,11 +47,12 @@ price is ignored (covered by a test).
 | Atomic DB write + event publish | **Transactional outbox** (`common/outbox`): the event row is saved in the same transaction and relayed to Kafka by a poller (`FOR UPDATE SKIP LOCKED`, so several instances can relay). At-least-once. Optional Debezium CDC replaces the poller (see below). |
 | Duplicate delivery | **Inbox / idempotent consumer** (`common/inbox`): a `processed_event` insert in the same transaction as the business effect. |
 | Event ordering across topics | None is assumed. Example: `PaymentAuthorized` may overtake `InventoryReserved`, so `confirm()` is accepted from `PENDING`; found by an integration test, fixed and unit-tested. |
-| Poison messages | Exponential-backoff retries, then `<topic>.DLT`. Malformed payloads are non-retryable and go straight to the DLT without blocking the partition (integration-tested). |
+| Poison messages | Exponential-backoff retries, then `<topic>.DLT`. Malformed payloads are non-retryable and go straight to the DLT without blocking the partition (integration-tested). Parked records are counted (`dead_letter_records_total`, alerted) and an admin tool lists, replays or acknowledges them: `GET/POST /api/v1/admin/dlt/...` on the notification service ([runbook](docs/runbooks/dead-letters.md)). |
 | Ordering | Order id is the Kafka key, so one order's events stay in one partition. |
 | Overselling | Atomic `UPDATE … WHERE available >= qty` is the guarantee; a Redis lock (sorted keys, token-checked release) only reduces contention. Multi-line orders are all-or-nothing. |
 | Duplicate client requests | `Idempotency-Key` header (`SET NX` in Redis, **scoped per customer**): `202` first time, `200` replay, `409` while in flight. |
 | AuthN / AuthZ | OAuth2 resource server. Customers see and cancel **only their own** orders (someone else's order is a `404`, so ids cannot be probed); `ADMIN` sees all. Same rules in REST and GraphQL. |
+| Internal APIs | Inventory, payment, catalog and the admin areas require a token with the right role: `ADMIN` (operators) or `SERVICE` (read-only, for other platform services). The order service calls the catalog with a short-lived service token (signed with the dev secret locally, a client-credentials grant from the identity provider in production). Unknown paths are denied, not just unlisted. |
 | Resilience | Circuit breaker + retry around the catalog and the card processor (Resilience4j). A processor outage becomes a *decline*, so the saga compensates instead of hanging; processor calls carry an idempotency key so a retry can never double-charge; an unreadable 2xx reply is retried with the same key, never treated as a decline. |
 | Read performance | Redis cache on `GET /orders/{id}` (30 s), evicted **after commit** on status change. |
 | Abuse protection | Per-caller token bucket in the gateway (Redis) plus a per-IP limiter in the order service (`429` + `Retry-After`). |
@@ -85,7 +86,7 @@ curl -s -X POST localhost:8081/api/v1/orders/<id>/cancel -H "Authorization: Bear
 
 Demo switches: **`SKU-LUXURY`** is priced above the simulated card limit (10 000) and is declined; `SKU-1003` has 5 units; an unknown SKU is a `422`.
 
-> `inventory`, `payment` and `catalog` expose admin/debug APIs (`restock`, `PUT /products`). They are **internal**: the gateway does not route them and the Helm chart gives them no ingress. Do not expose their ports publicly.
+> `inventory`, `payment` and `catalog` expose admin/debug APIs (`restock`, `PUT /products`). They are **internal**: the gateway does not route them, the Helm chart gives them no ingress, and they additionally require an `ADMIN` or `SERVICE` token. In compose, mint one with `POST :8081/dev/token {"customerId":"ops","admin":true}`.
 
 ### Ways to run it
 
@@ -121,6 +122,8 @@ The shared secret and the realm's user passwords in this repository are developm
 | E2E modes | HTTP card processor, Keycloak, Debezium (see "Ways to run it") | `E2E_PSP=1` / `E2E_KEYCLOAK=1` | matching stack |
 | Kubernetes | chart install on kind, full suites against it, zero dropped requests during a rolling update | `scripts/k8s-rollout-check.sh` | cluster |
 | Load | k6 against the real stack with latency and saga-completion thresholds | `k6 run load/orders.js` | running stack + k6 |
+
+**Docker 29+ and Testcontainers.** The integration tests use Testcontainers 1.x, whose Docker client is too old for Docker Engine 29 (it fails with "client version 1.32 is too old"). Run them on Docker Engine 28 or older (CI does), or wait for a Spring Boot release that manages Testcontainers 2. Everything else, including the compose-based end-to-end suites, works on current Docker.
 
 First time for Playwright: `cd e2e && npm ci && npx playwright install chromium`. For a bulk run start the stack with
 `RATE_LIMIT=100000` (the suite sends many requests from one IP); set `E2E_SKIP_GATEWAY_RATELIMIT=1` when the gateway burst is raised.
@@ -196,7 +199,7 @@ polling relay is safe because rows still in the table are picked up by the conne
 
 * JSON event schemas with compatibility checks, **not** Avro/Protobuf with a schema registry ([ADR 4](docs/adr/0004-json-events-with-json-schema-contracts-instead-of-avro-and-a-schema-registry.md)).
 * The card processor is simulated by default; the HTTP adapter is tested against a local fake and WireMock, not a real processor sandbox.
-* Inventory, payment and catalog admin endpoints are unauthenticated and rely on network isolation (see "Design decisions").
+* The admin tools (dead-letter replay) act on whole topics, not individual records, and have no per-operator audit trail beyond the logs.
 * A refund releases stock back to inventory; shipping and fulfilment are out of scope; notifications are logged, not sent.
 
 ## License

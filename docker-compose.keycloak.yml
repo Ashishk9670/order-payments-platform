@@ -4,12 +4,27 @@
 # Containers reach Keycloak as http://keycloak:8080, while browsers/tests reach it as http://localhost:8180, so the token's
 # "iss" differs between the two. Validating signatures against the JWKS endpoint (instead of issuer discovery) avoids
 # that mismatch; in production use a single public issuer URL and set ...JWT_ISSUER_URI instead.
+x-keycloak-resource-server: &keycloak-resource-server
+  JWT_SECRET: ""                  # empty => the shared-secret decoder is not created
+  SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: http://keycloak:8080/realms/orders/protocol/openid-connect/certs
+
 services:
   order-service:
     environment:
-      JWT_SECRET: ""                  # empty => the shared-secret decoder is not created
+      <<: *keycloak-resource-server
       DEV_TOKEN_ENABLED: "false"      # no dev token endpoint
       CUSTOMER_ID_CLAIM: preferred_username
-      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: http://keycloak:8080/realms/orders/protocol/openid-connect/certs
+      # calls to the catalog carry a token from the "order-service" client (client-credentials grant, SERVICE role)
+      SERVICE_ACCOUNT_TOKEN_URI: http://keycloak:8080/realms/orders/protocol/openid-connect/token
+      SERVICE_ACCOUNT_CLIENT_ID: order-service
+      SERVICE_ACCOUNT_CLIENT_SECRET: order-service-dev-secret
     depends_on:
       keycloak: { condition: service_started }
+  inventory-service:
+    environment: *keycloak-resource-server
+  payment-service:
+    environment: *keycloak-resource-server
+  catalog-service:
+    environment: *keycloak-resource-server
+  notification-service:
+    environment: *keycloak-resource-server

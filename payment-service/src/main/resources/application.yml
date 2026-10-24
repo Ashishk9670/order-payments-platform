@@ -65,3 +65,9 @@ psp:                                          # used when payment.gateway=http
   url: ${PSP_URL:http://localhost:9090}
   api-key: ${PSP_API_KEY:}                    # secret: provide via environment / secret store, never commit
   timeout-ms: ${PSP_TIMEOUT_MS:3000}
+
+security:
+  # HS256 shared secret for local/dev/CI. In production leave it empty and set
+  # spring.security.oauth2.resourceserver.jwt.issuer-uri (or jwk-set-uri) instead.
+  jwt:
+    secret: ${JWT_SECRET:}

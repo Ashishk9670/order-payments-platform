@@ -40,10 +40,44 @@ class KafkaCommonConfigTest {
     @Test
     void errorHandlerIsAConfiguredRetryThenDeadLetterHandler() {
         KafkaOperations<Object, Object> template = org.mockito.Mockito.mock(KafkaOperations.class);
+        org.springframework.beans.factory.ObjectProvider<io.micrometer.core.instrument.MeterRegistry> provider =
+                org.mockito.Mockito.mock(org.springframework.beans.factory.ObjectProvider.class);
 
-        DefaultErrorHandler handler = config.kafkaErrorHandler(template);
+        DefaultErrorHandler handler = config.kafkaErrorHandler(template, provider);
 
         assertThat(handler).isNotNull();
         assertThat(handler.deliveryAttemptHeader()).isNotNull();   // handler is built and usable by the listener container factory
+    }
+
+    @Test
+    void topicsAllListsEveryConstantExactlyOnce() throws Exception {
+        Set<String> declared = new LinkedHashSet<>();
+        for (Field f : Topics.class.getDeclaredFields()) {
+            if (Modifier.isPublic(f.getModifiers()) && f.getType() == String.class) {
+                declared.add((String) f.get(null));
+            }
+        }
+        assertThat(Topics.all()).containsExactlyInAnyOrderElementsOf(declared).doesNotHaveDuplicates();
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void everyParkedRecordIsCountedPerSourceTopic() throws Exception {
+        KafkaOperations<Object, Object> template = org.mockito.Mockito.mock(KafkaOperations.class);
+        var registry = new io.micrometer.core.instrument.simple.SimpleMeterRegistry();
+        org.springframework.beans.factory.ObjectProvider<io.micrometer.core.instrument.MeterRegistry> provider =
+                org.mockito.Mockito.mock(org.springframework.beans.factory.ObjectProvider.class);
+        org.mockito.Mockito.when(provider.getIfAvailable()).thenReturn(registry);
+        org.mockito.Mockito.when(template.send(org.mockito.ArgumentMatchers.any(org.apache.kafka.clients.producer.ProducerRecord.class)))
+                .thenReturn(java.util.concurrent.CompletableFuture.completedFuture(null));
+        var handler = config.kafkaErrorHandler(template, provider);
+        var record = new org.apache.kafka.clients.consumer.ConsumerRecord<Object, Object>("order.created.v1", 0, 5L, "k", "garbage");
+
+        // a non-retryable failure goes straight to the recoverer
+        handler.handleOne(new IllegalArgumentException("bad payload"), record,
+                org.mockito.Mockito.mock(org.apache.kafka.clients.consumer.Consumer.class),
+                org.mockito.Mockito.mock(org.springframework.kafka.listener.MessageListenerContainer.class));
+
+        assertThat(registry.counter("dead_letter.records", "topic", "order.created.v1").count()).isEqualTo(1.0);
     }
 }

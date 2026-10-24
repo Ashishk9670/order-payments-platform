@@ -76,6 +76,7 @@ services:
     build: { context: ., args: { MODULE: inventory-service } }
     ports: ["8082:8082"]
     environment:
+      JWT_SECRET: ${JWT_SECRET:-dev-only-secret-dev-only-secret-0123456789}   # DEV/CI ONLY
       TRACING_SAMPLING: ${TRACING_SAMPLING:-0.0}      # tracing is off unless the observability profile is used (see below)
       OTLP_TRACING_ENDPOINT: http://jaeger:4318/v1/traces
       DB_URL: jdbc:postgresql://postgres:5432/inventory
@@ -88,6 +89,7 @@ services:
     build: { context: ., args: { MODULE: payment-service } }
     ports: ["8083:8083"]
     environment:
+      JWT_SECRET: ${JWT_SECRET:-dev-only-secret-dev-only-secret-0123456789}   # DEV/CI ONLY
       TRACING_SAMPLING: ${TRACING_SAMPLING:-0.0}      # tracing is off unless the observability profile is used (see below)
       OTLP_TRACING_ENDPOINT: http://jaeger:4318/v1/traces
       DB_URL: jdbc:postgresql://postgres:5432/payments
@@ -129,6 +131,7 @@ services:
     build: { context: ., args: { MODULE: catalog-service } }
     ports: ["8085:8085"]
     environment:
+      JWT_SECRET: ${JWT_SECRET:-dev-only-secret-dev-only-secret-0123456789}   # DEV/CI ONLY
       TRACING_SAMPLING: ${TRACING_SAMPLING:-0.0}      # tracing is off unless the observability profile is used (see below)
       OTLP_TRACING_ENDPOINT: http://jaeger:4318/v1/traces
       DB_URL: jdbc:postgresql://postgres:5432/catalog
@@ -140,6 +143,7 @@ services:
     build: { context: ., args: { MODULE: notification-service } }
     ports: ["8084:8084"]
     environment:
+      JWT_SECRET: ${JWT_SECRET:-dev-only-secret-dev-only-secret-0123456789}   # DEV/CI ONLY
       TRACING_SAMPLING: ${TRACING_SAMPLING:-0.0}      # tracing is off unless the observability profile is used (see below)
       OTLP_TRACING_ENDPOINT: http://jaeger:4318/v1/traces
       KAFKA_BOOTSTRAP: kafka:19092

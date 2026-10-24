@@ -22,6 +22,14 @@ global:
 security:
   # Production: validate tokens issued by your identity provider (e.g. Keycloak) and leave the shared secret empty.
   issuerUri: ""                            # https://keycloak.example.com/realms/orders
+  jwkSetUri: ""                            # alternative to issuerUri: validate signatures against this JWKS endpoint
+  # How the order service authenticates to the catalog (client-credentials grant; the client needs the SERVICE role).
+  # Leave tokenUri empty in dev: it then signs a SERVICE token with the shared secret below.
+  serviceAccount:
+    tokenUri: ""
+    clientId: order-service
+    existingSecret: ""                     # Secret holding the client secret
+    secretKey: client-secret
   customerIdClaim: sub                     # preferred_username for the bundled Keycloak realm
   # Dev/CI only: HS256 shared secret + /dev/token endpoint. Must stay disabled in production.
   jwt:
