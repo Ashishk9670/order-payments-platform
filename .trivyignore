@@ -1,0 +1,10 @@
+# Findings the release scan deliberately does not block on. Every entry needs a reason and a way out; review when you bump Spring Boot.
+
+# spring-webmvc 6.2.19 is the newest 6.2.x release; Trivy lists the fix only in Spring Framework 7 (Spring Boot 4), a major upgrade
+# that needs its own change. Exit: migrate to Spring Boot 4 (tracked in docs/adr).
+CVE-2026-47884
+CVE-2026-47890
+
+# Go standard library inside the base image's /usr/bin/pebble (the image's init process), not code we build. Exit: rebuild on a
+# base image whose pebble is built with Go >= 1.27.3 (rebuilding the image picks it up automatically once published).
+CVE-2026-111943

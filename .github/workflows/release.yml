@@ -91,7 +91,7 @@ jobs:
         run: |
           $TRIVY image --severity HIGH,CRITICAL --ignore-unfixed --format table "$IMAGE" || true
           $TRIVY image --severity HIGH,CRITICAL --ignore-unfixed --format sarif --output /out/trivy-${{ matrix.module }}.sarif "$IMAGE"
-          $TRIVY image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 --quiet "$IMAGE"
+          $TRIVY image --severity HIGH,CRITICAL --ignore-unfixed --ignorefile /out/.trivyignore --exit-code 1 --quiet "$IMAGE"
 
       - name: Upload scan results
         if: always() && hashFiles(format('trivy-{0}.sarif', matrix.module)) != ''
