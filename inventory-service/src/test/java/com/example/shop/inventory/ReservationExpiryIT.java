@@ -59,8 +59,13 @@ class ReservationExpiryIT {
     @Test
     void anUnpaidReservationExpiresReleasesTheStockAndTellsTheOrderService() throws Exception {
         String sku = sku(10);
+        String other = sku(5);   // a two-line order: every line must be released AND marked, not just the first
         try (var probe = new KafkaProbe(kafkaDetails.getBootstrapServers().get(0), Topics.INVENTORY_EXPIRED)) {
-            var order = reserve(sku, 4);
+            var order = OrderCreated.of(UUID.randomUUID(), "cust",
+                    List.of(new OrderCreated.Line(sku, 4), new OrderCreated.Line(other, 2)), new BigDecimal("10.00"));
+            send(Topics.ORDER_CREATED, order.orderId(), order);
+            await().atMost(Duration.ofSeconds(30)).untilAsserted(
+                    () -> assertThat(reservations.findByOrderIdAndStatus(order.orderId(), Reservation.Status.RESERVED)).hasSize(2));
             assertThat(items.findById(sku).orElseThrow().getAvailable()).isEqualTo(6);
 
             var record = probe.awaitKey(order.orderId().toString(), Duration.ofSeconds(60)).orElseThrow();
@@ -70,7 +75,8 @@ class ReservationExpiryIT {
                 assertThat(item.getAvailable()).isEqualTo(10);
                 assertThat(item.getReserved()).isZero();
             });
-            assertThat(reservations.findByOrderIdAndStatus(order.orderId(), Reservation.Status.EXPIRED)).hasSize(1);
+            assertThat(items.findById(other).orElseThrow().getAvailable()).isEqualTo(5);
+            assertThat(reservations.findByOrderIdAndStatus(order.orderId(), Reservation.Status.EXPIRED)).hasSize(2);
             // exactly one expiry event, even though the job keeps running
             assertThat(probe.collect(order.orderId().toString(), Duration.ofSeconds(4))).hasSize(1);
         }

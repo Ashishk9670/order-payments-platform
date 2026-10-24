@@ -27,7 +27,7 @@ live subscriptions), an AsyncAPI contract, OAuth2/JWT security, an API gateway, 
 
 Each service owns its PostgreSQL database. Services talk through Kafka events (and the one synchronous call to the
 catalog); nothing imports another service's code, and an ArchUnit test enforces that.
-Why things are the way they are: [`docs/adr`](docs/adr). Operating it: [`docs/runbooks`](docs/runbooks) and [`docs/slo.md`](docs/slo.md).
+Why things are the way they are: [`docs/adr`](docs/adr). Operating it: [`docs/runbooks`](docs/runbooks), [`docs/slo.md`](docs/slo.md), [`docs/capacity.md`](docs/capacity.md) and GitOps/Argo CD in [`deploy/gitops`](deploy/gitops).
 
 ## What it does
 
@@ -48,7 +48,8 @@ price is ignored (covered by a test).
 | Duplicate delivery | **Inbox / idempotent consumer** (`common/inbox`): a `processed_event` insert in the same transaction as the business effect. |
 | Event ordering across topics | None is assumed. Example: `PaymentAuthorized` may overtake `InventoryReserved`, so `confirm()` is accepted from `PENDING`; found by an integration test, fixed and unit-tested. |
 | Poison messages | Exponential-backoff retries, then `<topic>.DLT`. Malformed payloads are non-retryable and go straight to the DLT without blocking the partition (integration-tested). Parked records are counted (`dead_letter_records_total`, alerted) and an admin tool lists, replays or acknowledges them: `GET/POST /api/v1/admin/dlt/...` on the notification service ([runbook](docs/runbooks/dead-letters.md)). |
-| Ordering | Order id is the Kafka key, so one order's events stay in one partition. |
+| Abandoned orders | Stock is reserved with a TTL (`inventory.reservation-ttl`, 30 min). A sweeper releases unpaid reservations (`InventoryExpired`, which cancels the order); a payment that arrives *after* expiry is refunded automatically. Orders that sit in a non-final state too long are counted (`orders_stuck`) and listed at `GET /api/v1/admin/orders/stuck`. |
+| Dependency outages | Redis fails open (cache, rate limit, stock lock) except idempotent requests, which get an honest `503`; a hung database fails fast (JDBC/Hikari timeouts) with `503 + Retry-After`. Proven by the chaos suite below. || Ordering | Order id is the Kafka key, so one order's events stay in one partition. |
 | Overselling | Atomic `UPDATE … WHERE available >= qty` is the guarantee; a Redis lock (sorted keys, token-checked release) only reduces contention. Multi-line orders are all-or-nothing. |
 | Duplicate client requests | `Idempotency-Key` header (`SET NX` in Redis, **scoped per customer**): `202` first time, `200` replay, `409` while in flight. |
 | AuthN / AuthZ | OAuth2 resource server. Customers see and cancel **only their own** orders (someone else's order is a `404`, so ids cannot be probed); `ADMIN` sees all. Same rules in REST and GraphQL. |
@@ -120,8 +121,8 @@ The shared secret and the realm's user passwords in this repository are developm
 | E2E API | the full saga through the real stack, refund saga, security/isolation, gateway, catalog, GraphQL incl. SSE subscription | `cd e2e && npm ci && npx playwright test --project=api` | running stack |
 | E2E UI | storefront in Chromium: flows, validation, live updates vs polling fallback, accessibility (axe, light + dark), keyboard, phone viewport, through the gateway | `npx playwright test --project=ui` | running stack |
 | E2E modes | HTTP card processor, Keycloak, Debezium (see "Ways to run it") | `E2E_PSP=1` / `E2E_KEYCLOAK=1` | matching stack |
-| Kubernetes | chart install on kind, full suites against it, zero dropped requests during a rolling update | `scripts/k8s-rollout-check.sh` | cluster |
-| Load | k6 against the real stack with latency and saga-completion thresholds | `k6 run load/orders.js` | running stack + k6 |
+| Chaos | pauses/stops Kafka, Redis, Postgres, payment and inventory mid-flow: nothing lost, duplicated or oversold, and it heals unaided | `E2E_CHAOS=1 npx playwright test --project=chaos` | compose stack (it stops containers!) || Kubernetes | chart install on kind, full suites against it, zero dropped requests during a rolling update | `scripts/k8s-rollout-check.sh` | cluster |
+| Load | k6 against the real stack with latency and saga-completion thresholds; results in [`docs/capacity.md`](docs/capacity.md) | `k6 run load/orders.js` | running stack + k6 |
 
 **Docker 29+ and Testcontainers.** The integration tests use Testcontainers 1.x, whose Docker client is too old for Docker Engine 29 (it fails with "client version 1.32 is too old"). Run them on Docker Engine 28 or older (CI does), or wait for a Spring Boot release that manages Testcontainers 2. Everything else, including the compose-based end-to-end suites, works on current Docker.
 
@@ -132,9 +133,9 @@ First time for Playwright: `cd e2e && npm ci && npx playwright install chromium`
 
 * **ci.yml** — `unit` (tests, architecture, contracts, coverage gate), `helm` (lint + render + unsafe-config rejection),
   `integration` (Testcontainers), `e2e` (docker compose + Playwright; the report is uploaded).
-* **modes.yml** — the HTTP card processor, Keycloak and Debezium variants of the stack, each with its own end-to-end suite.
+* **modes.yml** — the HTTP card processor, Keycloak and Debezium variants of the stack, each with its own end-to-end suite, plus the chaos (failure-injection) suite.
 * **k8s.yml** — installs the chart on a kind cluster, runs the suites against it and checks a rolling update drops nothing.
-* **release.yml** — builds and publishes one image per service to GHCR for commits whose CI passed (and for `v*.*.*` tags), with provenance and SBOM. Only for pushes to this repository, never fork pull requests.
+* **release.yml** — builds and publishes one image per service to GHCR for commits whose CI passed (and for `v*.*.*` tags), with provenance and SBOM, scanned with Trivy (fixable HIGH/CRITICAL fails) and signed keyless with cosign. Only for pushes to this repository, never fork pull requests.
 * **codeql.yml** — CodeQL for Java and TypeScript on push/PR and weekly. **dependabot.yml** — grouped minor/patch updates for Maven, npm, Actions and Docker (majors are left to a human).
 * **load.yml** — nightly k6 run that fails on threshold breaches.
 

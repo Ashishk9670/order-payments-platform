@@ -13,7 +13,9 @@ public interface InventoryItemRepository extends JpaRepository<InventoryItem, St
             + "where i.sku = :sku and i.available >= :qty")
     int tryReserve(@Param("sku") String sku, @Param("qty") int qty);
 
-    @Modifying(clearAutomatically = true)
+    // No clearAutomatically: callers release several lines in one transaction and then update the Reservation entities, which a
+    // cleared persistence context would silently detach (the stock came back but the reservation status was never saved).
+    @Modifying(flushAutomatically = true)
     @Query("update InventoryItem i set i.available = i.available + :qty, i.reserved = i.reserved - :qty where i.sku = :sku")
     int release(@Param("sku") String sku, @Param("qty") int qty);
 

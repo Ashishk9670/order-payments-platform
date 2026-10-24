@@ -1,0 +1,12 @@
+# Production: validate tokens from the real identity provider, never the shared secret; sample few traces.
+security:
+  issuerUri: https://keycloak.example.com/realms/orders
+  customerIdClaim: preferred_username
+  devTokenEnabled: false
+tracing:
+  samplingProbability: "0.05"
+payment:
+  gateway: http
+  psp:
+    url: https://psp.example.com          # your card processor's API
+    existingSecret: order-platform-psp    # holds the API key

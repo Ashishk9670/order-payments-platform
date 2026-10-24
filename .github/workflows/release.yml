@@ -14,6 +14,8 @@ on:
 permissions:
   contents: read
   packages: write
+  id-token: write        # keyless cosign signing (OIDC), no long-lived signing key to leak
+  security-events: write # Trivy results appear in the Security tab
 
 concurrency:
   group: release-${{ github.ref }}
@@ -59,7 +61,8 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
 
-      - uses: docker/build-push-action@v6
+      - id: build
+        uses: docker/build-push-action@v6
         with:
           context: .
           build-args: MODULE=${{ matrix.module }}
@@ -70,3 +73,31 @@ jobs:
           sbom: true
           cache-from: type=gha,scope=${{ matrix.module }}
           cache-to: type=gha,mode=max,scope=${{ matrix.module }}
+
+      # Scan the exact image that was pushed (by digest). Fixable HIGH/CRITICAL findings fail the job; the "unfixed" ones
+      # (no patch exists yet) are ignored so the gate only blocks on things someone can actually do something about.
+      - name: Scan the image for vulnerabilities (Trivy)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ghcr.io/${{ github.repository }}/${{ matrix.module }}@${{ steps.build.outputs.digest }}
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          format: sarif
+          output: trivy-${{ matrix.module }}.sarif
+        env:
+          TRIVY_USERNAME: ${{ github.actor }}
+          TRIVY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload scan results
+        if: always() && hashFiles(format('trivy-{0}.sarif', matrix.module)) != ''
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-${{ matrix.module }}.sarif
+          category: trivy-${{ matrix.module }}
+
+      # Sign only images that passed the scan, so "signed" means "scanned and built by this workflow".
+      - uses: sigstore/cosign-installer@v3.7.0
+
+      - name: Sign the image (keyless)
+        run: cosign sign --yes ghcr.io/${{ github.repository }}/${{ matrix.module }}@${{ steps.build.outputs.digest }}

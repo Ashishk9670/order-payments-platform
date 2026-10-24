@@ -1,0 +1,23 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: order-platform-staging
+  namespace: argocd
+spec:
+  project: order-platform
+  source:
+    repoURL: https://github.com/Ashishk9670/order-payments-platform.git
+    path: deploy/helm/order-platform
+    targetRevision: main
+    helm:
+      valueFiles: [values.yaml, values-staging.yaml]
+      # image tag: set the commit that CI verified and the release workflow signed, e.g. sha-<40 hex>
+      parameters:
+        - name: image.tag
+          value: "REPLACE_WITH_RELEASED_TAG"
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: order-platform-staging
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }   # staging follows Git
+    syncOptions: [CreateNamespace=true]

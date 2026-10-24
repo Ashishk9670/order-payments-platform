@@ -1,0 +1,13 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: order-platform
+  namespace: argocd
+spec:
+  description: Order and payments platform
+  sourceRepos:
+    - https://github.com/Ashishk9670/order-payments-platform.git
+  destinations:
+    - namespace: order-platform-*
+      server: https://kubernetes.default.svc
+  clusterResourceWhitelist: []     # the chart creates only namespaced resources

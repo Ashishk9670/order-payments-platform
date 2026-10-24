@@ -29,6 +29,7 @@ const confirmed = new Rate('orders_confirmed');                    // sampled or
 const placed = new Counter('orders_placed');
 
 export const options = {
+  summaryTrendStats: ['avg', 'med', 'p(95)', 'p(99)', 'max'],   // p(99) is not in k6's default set, and handleSummary reads it
   scenarios: {
     place_orders: {
       executor: 'ramping-arrival-rate',

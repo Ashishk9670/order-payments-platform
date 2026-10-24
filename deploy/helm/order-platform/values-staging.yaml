@@ -1,0 +1,7 @@
+# Staging: production-shaped (real IdP, no dev tokens) but small. Layered on values.yaml by Argo CD.
+security:
+  issuerUri: https://keycloak.staging.example.com/realms/orders
+  customerIdClaim: preferred_username
+  devTokenEnabled: false
+tracing:
+  samplingProbability: "0.5"   # staging is where traces are looked at, so keep most of them
