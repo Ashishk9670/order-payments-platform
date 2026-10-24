@@ -1,5 +1,5 @@
 # One Dockerfile for all services:  docker build --build-arg MODULE=order-service .
-FROM maven:3.9-eclipse-temurin-21 AS build
+FROM maven:3.9-eclipse-temurin-26 AS build
 WORKDIR /src
 COPY pom.xml .
 COPY common/pom.xml common/
