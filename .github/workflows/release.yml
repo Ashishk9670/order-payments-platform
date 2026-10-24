@@ -74,12 +74,16 @@ jobs:
           cache-from: type=gha,scope=${{ matrix.module }}
           cache-to: type=gha,mode=max,scope=${{ matrix.module }}
 
+      # registry names must be lowercase; github.repository keeps the owner's capitalisation
+      - id: image
+        run: echo "ref=ghcr.io/${GITHUB_REPOSITORY,,}/${{ matrix.module }}@${{ steps.build.outputs.digest }}" >> "$GITHUB_OUTPUT"
+
       # Scan the exact image that was pushed (by digest). Fixable HIGH/CRITICAL findings fail the job; the "unfixed" ones
       # (no patch exists yet) are ignored so the gate only blocks on things someone can actually do something about.
       - name: Scan the image for vulnerabilities (Trivy)
         uses: aquasecurity/trivy-action@v0.33.1
         with:
-          image-ref: ghcr.io/${{ github.repository }}/${{ matrix.module }}@${{ steps.build.outputs.digest }}
+          image-ref: ${{ steps.image.outputs.ref }}
           severity: HIGH,CRITICAL
           ignore-unfixed: true
           exit-code: "1"
@@ -100,4 +104,4 @@ jobs:
       - uses: sigstore/cosign-installer@v3.7.0
 
       - name: Sign the image (keyless)
-        run: cosign sign --yes ghcr.io/${{ github.repository }}/${{ matrix.module }}@${{ steps.build.outputs.digest }}
+        run: cosign sign --yes ${{ steps.image.outputs.ref }}
