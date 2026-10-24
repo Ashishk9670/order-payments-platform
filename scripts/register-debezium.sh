@@ -22,4 +22,4 @@ print(json.dumps(config))
 PY
 done
 
-echo "done; check status with: curl ${CONNECT_URL}/connectors?expand=status"
+echo "done; check status with: curl '${CONNECT_URL}/connectors?expand=status'"

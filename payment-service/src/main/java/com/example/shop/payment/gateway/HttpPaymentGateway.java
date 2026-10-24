@@ -1,6 +1,8 @@
 package com.example.shop.payment.gateway;
 
 import com.example.shop.payment.domain.PaymentGateway;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.decorators.Decorators;
@@ -16,6 +18,7 @@ import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClientException;
 
 /**
@@ -42,6 +45,9 @@ public class HttpPaymentGateway implements PaymentGateway {
 
     record Response(String status, String reason) {
     }
+
+    /** Lenient on purpose: processors add fields and send odd content types; only the fields we use matter. */
+    private static final ObjectMapper JSON = new ObjectMapper().configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
     private final RestClient http;
     private final CircuitBreaker breaker;
@@ -90,10 +96,28 @@ public class HttpPaymentGateway implements PaymentGateway {
 
     private Response post(String path, String idempotencyKey, Request body) {
         try {
-            return http.post().uri(path).header("Idempotency-Key", idempotencyKey).body(body).retrieve().body(Response.class);
+            String raw = http.post().uri(path).header("Idempotency-Key", idempotencyKey).body(body).retrieve().body(String.class);
+            return parse(raw);
         } catch (HttpClientErrorException e) {
             // 4xx = the processor understood and said no. A final answer: no retry, no breaker penalty.
             return new Response("declined", "Rejected by processor (" + e.getStatusCode().value() + ")");
+        }
+    }
+
+    /**
+     * A 2xx whose body we cannot read is NOT a decline: the charge may well have happened. Treat it as a transient failure so
+     * it is retried with the same idempotency key (the processor then replays the original result); if it never becomes
+     * readable the call ends as "provider unavailable" and the saga compensates.
+     */
+    private static Response parse(String raw) {
+        try {
+            Response response = raw == null || raw.isBlank() ? null : JSON.readValue(raw, Response.class);
+            if (response == null || response.status() == null) {
+                throw new ResourceAccessException("Processor response has no status");
+            }
+            return response;
+        } catch (java.io.IOException e) {
+            throw new ResourceAccessException("Unreadable processor response", e);
         }
     }
 }

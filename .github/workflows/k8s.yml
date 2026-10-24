@@ -1,0 +1,102 @@
+name: Kubernetes
+
+# Installs the Helm chart on a throwaway kind cluster, runs the API and browser suites against it, and proves a rolling
+# update drops no requests.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "deploy/**"
+      - "Dockerfile"
+      - ".github/workflows/k8s.yml"
+      - "scripts/k8s-rollout-check.sh"
+  pull_request:
+    paths:
+      - "deploy/**"
+      - "Dockerfile"
+      - ".github/workflows/k8s.yml"
+  schedule:
+    - cron: "0 4 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: k8s-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  kind:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      E2E_SKIP_GATEWAY_RATELIMIT: "1"     # the chart values raise the burst for the test run
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build the six service images
+        run: |
+          for svc in api-gateway order-service inventory-service payment-service catalog-service notification-service; do
+            docker buildx build --load --build-arg MODULE=$svc -t local/$svc:dev \
+              --cache-from type=gha,scope=k8s-$svc --cache-to type=gha,mode=max,scope=k8s-$svc . &
+          done
+          wait
+
+      - uses: helm/kind-action@v1
+        with:
+          cluster_name: orders
+
+      - name: Load images, install infrastructure and the chart
+        run: |
+          for svc in api-gateway order-service inventory-service payment-service catalog-service notification-service; do
+            kind load docker-image local/$svc:dev --name orders
+          done
+          kubectl apply -f deploy/local/infra.yaml
+          kubectl create secret generic orders-jwt --from-literal=jwt-secret='ci-kind-secret-ci-kind-secret-0123456789'
+          kubectl wait --for=condition=available deploy/postgres deploy/redis deploy/kafka --timeout=300s
+          helm install orders deploy/helm/order-platform -f deploy/local/values-kind.yaml
+          for d in catalog-service order-service inventory-service payment-service notification-service api-gateway; do
+            kubectl rollout status deploy/orders-$d --timeout=420s
+          done
+
+      - name: Show what was deployed
+        run: kubectl get pods,svc,pdb,networkpolicy
+
+      - name: Port-forward the services
+        run: |
+          for pair in api-gateway:8080 order-service:8081 inventory-service:8082 payment-service:8083 notification-service:8084 catalog-service:8085; do
+            svc=${pair%%:*}; port=${pair##*:}
+            nohup kubectl port-forward svc/orders-$svc $port:$port > /tmp/pf-$svc.log 2>&1 &
+          done
+          sleep 5
+          ./scripts/wait-for-stack.sh
+
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: e2e/package-lock.json }
+      - name: Install Playwright
+        working-directory: e2e
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: API and browser suites against the cluster
+        working-directory: e2e
+        run: npx playwright test
+
+      - name: A rolling update drops no requests
+        run: ./scripts/k8s-rollout-check.sh
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with: { name: k8s-report, path: "e2e/playwright-report/\ne2e/test-results/" }
+
+      - name: Diagnostics on failure
+        if: failure()
+        run: |
+          kubectl get pods -o wide
+          kubectl describe pods | tail -120
+          for d in order-service payment-service inventory-service; do echo "== $d"; kubectl logs deploy/orders-$d --tail=80; done

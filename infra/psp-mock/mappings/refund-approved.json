@@ -1,0 +1,16 @@
+{
+  "priority": 5,
+  "request": {
+    "method": "POST",
+    "urlPath": "/v1/refunds"
+  },
+  "response": {
+    "status": 200,
+    "jsonBody": {
+      "status": "approved"
+    },
+    "headers": {
+      "Content-Type": "application/json"
+    }
+  }
+}

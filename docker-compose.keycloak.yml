@@ -1,0 +1,15 @@
+# Overlay: validate tokens issued by the bundled Keycloak realm instead of the dev shared secret.
+#   docker compose -f docker-compose.yml -f docker-compose.keycloak.yml --profile apps --profile keycloak up -d
+#
+# Containers reach Keycloak as http://keycloak:8080, while browsers/tests reach it as http://localhost:8180, so the token's
+# "iss" differs between the two. Validating signatures against the JWKS endpoint (instead of issuer discovery) avoids
+# that mismatch; in production use a single public issuer URL and set ...JWT_ISSUER_URI instead.
+services:
+  order-service:
+    environment:
+      JWT_SECRET: ""                  # empty => the shared-secret decoder is not created
+      DEV_TOKEN_ENABLED: "false"      # no dev token endpoint
+      CUSTOMER_ID_CLAIM: preferred_username
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: http://keycloak:8080/realms/orders/protocol/openid-connect/certs
+    depends_on:
+      keycloak: { condition: service_started }

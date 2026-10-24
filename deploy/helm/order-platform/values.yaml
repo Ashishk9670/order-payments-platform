@@ -36,6 +36,12 @@ payment:
     existingSecret: ""                     # Secret holding the processor API key
     apiKeyKey: api-key
 
+rateLimit:
+  orderServicePerIpPerMinute: 120          # per client IP, enforced in the order service (429 + Retry-After)
+  gateway:                                 # per caller (token hash, else IP), token bucket shared via Redis
+    replenishPerSecond: 50
+    burst: 100
+
 tracing:
   samplingProbability: "0.05"
   otlpEndpoint: ""                         # http://otel-collector:4318/v1/traces ; empty disables export noise

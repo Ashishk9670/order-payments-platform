@@ -91,6 +91,8 @@ services:
       TRACING_SAMPLING: ${TRACING_SAMPLING:-0.0}      # tracing is off unless the observability profile is used (see below)
       OTLP_TRACING_ENDPOINT: http://jaeger:4318/v1/traces
       DB_URL: jdbc:postgresql://postgres:5432/payments
+      PAYMENT_GATEWAY: ${PAYMENT_GATEWAY:-simulated}      # simulated | http (then PSP_URL below is used)
+      PSP_URL: ${PSP_URL:-http://psp-mock:8080}
       KAFKA_BOOTSTRAP: kafka:19092
     depends_on: *infra
 
@@ -159,7 +161,15 @@ services:
     image: prom/prometheus:v2.55.1
     volumes:
       - ./infra/observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infra/observability/alerts.yml:/etc/prometheus/alerts.yml:ro
     ports: ["9091:9090"]
+
+  alertmanager:
+    profiles: [observability]
+    image: prom/alertmanager:v0.27.0
+    volumes:
+      - ./infra/observability/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    ports: ["9093:9093"]
 
   grafana:
     profiles: [observability]
@@ -171,7 +181,7 @@ services:
     volumes:
       - ./infra/observability/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./infra/observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
-    ports: ["3000:3000"]
+    ports: ["${GRAFANA_PORT:-3000}:3000"]
     depends_on: [prometheus]
 
   # ---- optional: log-based outbox publishing with Debezium (instead of the polling relay) ------------------------
@@ -190,3 +200,14 @@ services:
     depends_on:
       kafka: { condition: service_healthy }
       postgres: { condition: service_healthy }
+
+  # ---- optional: a fake card processor (WireMock) to exercise the HTTP payment adapter -------------------------------
+  #   PAYMENT_GATEWAY=http docker compose --profile apps --profile psp up -d
+  #   amounts: >= 20000 declined | 13.13 -> HTTP 402 | 66.66 -> HTTP 503 (outage) | anything else approved
+  psp-mock:
+    profiles: [psp]
+    image: wiremock/wiremock:3.9.1
+    command: ["--global-response-templating", "--verbose"]
+    volumes:
+      - ./infra/psp-mock:/home/wiremock:ro
+    ports: ["9090:8080"]

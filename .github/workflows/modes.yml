@@ -1,0 +1,127 @@
+name: E2E modes
+
+# The default CI job proves the standard stack. These prove the OTHER ways the platform is run, each with the same
+# real containers: a card processor over HTTP, real Keycloak tokens, and Debezium publishing the outbox.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - "docker-compose*.yml"
+      - "infra/**"
+      - "payment-service/**"
+      - "order-service/**"
+      - "common/**"
+      - "scripts/**"
+      - "e2e/**"
+      - ".github/workflows/modes.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: modes-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  RATE_LIMIT: "100000000"
+
+jobs:
+  psp:
+    name: Card processor over HTTP (WireMock)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start the stack with the HTTP payment adapter
+        run: PAYMENT_GATEWAY=http docker compose --profile apps --profile psp up --build -d
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: e2e/package-lock.json }
+      - run: npm ci
+        working-directory: e2e
+      - run: ./scripts/wait-for-stack.sh
+      - name: Processor scenarios (approve, decline, 4xx, refund, outage + circuit breaker)
+        working-directory: e2e
+        run: E2E_PSP=1 npx playwright test --project=psp
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with: { name: psp-report, path: "e2e/playwright-report/\ne2e/test-results/" }
+      - if: failure()
+        run: docker compose --profile apps --profile psp logs --no-color --tail=200
+      - if: always()
+        run: docker compose --profile apps --profile psp down -v
+
+  keycloak:
+    name: Real identity provider (Keycloak)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start the stack validating Keycloak tokens (dev token endpoint off)
+        run: docker compose -f docker-compose.yml -f docker-compose.keycloak.yml --profile apps --profile keycloak up --build -d
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: e2e/package-lock.json }
+      - run: npm ci
+        working-directory: e2e
+      - run: ./scripts/wait-for-stack.sh
+      - name: Wait for the realm
+        run: |
+          for i in $(seq 1 90); do
+            curl -fsS localhost:8180/realms/orders/.well-known/openid-configuration > /dev/null 2>&1 && exit 0
+            sleep 3
+          done
+          echo "Keycloak realm never became ready" >&2; exit 1
+      - name: Login, isolation, admin role, forged tokens
+        working-directory: e2e
+        run: E2E_KEYCLOAK=1 npx playwright test --project=keycloak
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with: { name: keycloak-report, path: "e2e/playwright-report/\ne2e/test-results/" }
+      - if: failure()
+        run: docker compose -f docker-compose.yml -f docker-compose.keycloak.yml --profile apps --profile keycloak logs --no-color --tail=200
+      - if: always()
+        run: docker compose -f docker-compose.yml -f docker-compose.keycloak.yml --profile apps --profile keycloak down -v
+
+  cdc:
+    name: Outbox published by Debezium (no polling relay)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start the stack with the relay off and CDC on
+        run: docker compose -f docker-compose.yml -f docker-compose.cdc.yml --profile apps --profile cdc up --build -d
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: e2e/package-lock.json }
+      - run: npm ci
+        working-directory: e2e
+      - run: ./scripts/wait-for-stack.sh
+      - name: Register the connectors and wait until they run
+        run: |
+          for i in $(seq 1 60); do curl -fsS localhost:8089/connectors > /dev/null 2>&1 && break; sleep 3; done
+          CONNECT_URL=http://localhost:8089 POSTGRES_PASSWORD=postgres ./scripts/register-debezium.sh
+          for i in $(seq 1 60); do
+            running=$(curl -fsS 'localhost:8089/connectors?expand=status' | python3 -c "import sys,json; d=json.load(sys.stdin); print(sum(1 for v in d.values() if v['status']['connector']['state']=='RUNNING' and v['status']['tasks'] and all(t['state']=='RUNNING' for t in v['status']['tasks'])))")
+            [ "$running" = "3" ] && exit 0
+            sleep 3
+          done
+          echo "connectors did not reach RUNNING" >&2; curl -s 'localhost:8089/connectors?expand=status'; exit 1
+      - name: Order and refund sagas with Debezium as the only publisher
+        working-directory: e2e
+        run: npx playwright test --project=api -g "saga|refund"
+      - name: The outbox is drained (rows are deleted after insert in CDC mode)
+        run: |
+          for db in orders inventory payments; do
+            n=$(docker compose exec -T postgres psql -U postgres -d $db -tAc "select count(*) from outbox_event where published_at is null")
+            echo "$db unpublished rows: $n"; [ "$n" = "0" ]
+          done
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with: { name: cdc-report, path: "e2e/playwright-report/\ne2e/test-results/" }
+      - if: failure()
+        run: docker compose -f docker-compose.yml -f docker-compose.cdc.yml --profile apps --profile cdc logs --no-color --tail=200
+      - if: always()
+        run: docker compose -f docker-compose.yml -f docker-compose.cdc.yml --profile apps --profile cdc down -v

@@ -46,9 +46,12 @@ helm.sh/chart: {{ printf "%s-%s" .root.Chart.Name .root.Chart.Version }}
 {{- end }}
 {{- if eq .name "api-gateway" }}
 - { name: ORDER_SERVICE_URL, value: {{ include "op.url" (dict "root" .root "name" "order-service") | quote }} }
+- { name: GATEWAY_RATE_REPLENISH, value: {{ $v.rateLimit.gateway.replenishPerSecond | int64 | quote }} }
+- { name: GATEWAY_RATE_BURST, value: {{ $v.rateLimit.gateway.burst | int64 | quote }} }
 {{- end }}
 {{- if eq .name "order-service" }}
 - { name: CATALOG_URL, value: {{ include "op.url" (dict "root" .root "name" "catalog-service") | quote }} }
+- { name: RATELIMIT_REQUESTS_PER_MINUTE, value: {{ $v.rateLimit.orderServicePerIpPerMinute | int64 | quote }} }
 - { name: CUSTOMER_ID_CLAIM, value: {{ $v.security.customerIdClaim | quote }} }
 - { name: DEV_TOKEN_ENABLED, value: {{ $v.security.devTokenEnabled | quote }} }
 {{- if $v.security.issuerUri }}

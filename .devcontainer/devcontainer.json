@@ -1,0 +1,16 @@
+{
+  "name": "order-platform",
+  "image": "mcr.microsoft.com/devcontainers/java:1-21-bookworm",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {},
+    "ghcr.io/devcontainers/features/node:1": { "version": "22" },
+    "ghcr.io/devcontainers/features/kubectl-helm-minikube:1": { "minikube": "none" }
+  },
+  "forwardPorts": [8080, 8081, 3000, 16686],
+  "postCreateCommand": "mvn -B -q -DskipTests dependency:go-offline || true",
+  "customizations": {
+    "vscode": {
+      "extensions": ["vscjava.vscode-java-pack", "vmware.vscode-boot-dev-pack", "ms-playwright.playwright", "redhat.vscode-yaml"]
+    }
+  }
+}

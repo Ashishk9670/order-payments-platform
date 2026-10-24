@@ -1,10 +1,11 @@
 import { test, expect } from '@playwright/test';
 import { URLS } from '../../playwright.config';
 import { uid } from '../../support/api';
+import { catalogLoaded } from '../../support/ui';
 
 test('the storefront works end-to-end through the gateway (REST + GraphQL + SSE)', async ({ page }) => {
   await page.goto(`${URLS.gateway}/`);
-  await expect(page.getByTestId('sku').locator('option')).not.toHaveCount(1);
+  await catalogLoaded(page);
   await page.getByTestId('customer-id').fill(uid('gw'));
   await page.getByTestId('sku').selectOption('SKU-1002');
 

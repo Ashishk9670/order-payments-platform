@@ -8,6 +8,8 @@ export const URLS = {
   notification: process.env.NOTIFICATION_URL ?? 'http://localhost:8084',
   catalog: process.env.CATALOG_URL ?? 'http://localhost:8085',
   gateway: process.env.GATEWAY_URL ?? 'http://localhost:8080',
+  psp: process.env.PSP_URL ?? 'http://localhost:9090',
+  keycloak: process.env.KEYCLOAK_URL ?? 'http://localhost:8180',
 };
 
 export default defineConfig({
@@ -29,5 +31,10 @@ export default defineConfig({
   projects: [
     { name: 'api', testDir: './tests/api' },
     { name: 'ui', testDir: './tests/ui', use: { ...devices['Desktop Chrome'] } },
+    // Opt-in suites that need a differently configured stack, so the default run stays green on the default stack:
+    //   E2E_PSP=1    payment-service uses the HTTP adapter against the WireMock processor (compose profile "psp")
+    //   E2E_KEYCLOAK=1  order-service validates Keycloak tokens (docker-compose.keycloak.yml overlay); the dev token endpoint is OFF
+    ...(process.env.E2E_KEYCLOAK ? [{ name: 'keycloak', testDir: './tests/keycloak', use: { extraHTTPHeaders: {} } }] : []),
+    ...(process.env.E2E_PSP ? [{ name: 'psp', testDir: './tests/psp', workers: 1 }] : []),
   ],
 });

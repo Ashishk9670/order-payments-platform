@@ -3,6 +3,8 @@ import { URLS } from '../playwright.config';
 
 /** The UI offers the seeded SKUs; top them up so repeated local runs never run out of stock. */
 export default async function globalSetup() {
+  // Keycloak mode has no dev token endpoint (that is the point of the mode); its suite logs in as real realm users
+  if (process.env.E2E_KEYCLOAK) return;
   const ctx = await request.newContext();
   const t = await ctx.post(`${URLS.order}/dev/token`, { data: { customerId: 'e2e-admin', admin: true } });
   if (!t.ok()) throw new Error(`Cannot mint an e2e admin token: ${t.status()} (is DEV_TOKEN_ENABLED=true?)`);

@@ -1,5 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import { uid } from '../../support/api';
+import { catalogLoaded } from '../../support/ui';
 
 async function fill(page: Page, o: { customer: string; sku?: string; qty?: string }) {
   await page.getByTestId('customer-id').fill(o.customer);
@@ -9,7 +10,7 @@ async function fill(page: Page, o: { customer: string; sku?: string; qty?: strin
 
 test.beforeEach(async ({ page }) => {
   await page.goto('/');
-  await expect(page.getByTestId('sku').locator('option')).not.toHaveCount(1); // catalog loaded
+  await catalogLoaded(page);
 });
 
 test('page loads with the order form and catalog products', async ({ page }) => {

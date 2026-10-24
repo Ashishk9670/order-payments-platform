@@ -1,0 +1,49 @@
+# Values for trying the chart on a local kind/minikube cluster together with deploy/local/infra.yaml.
+#   kind load docker-image local/<service>:dev ...   (images built by docker compose, retagged)
+#   helm install orders deploy/helm/order-platform -f deploy/local/values-kind.yaml
+image:
+  registry: local
+  tag: dev
+  pullPolicy: Never              # images were loaded into the cluster, never pulled
+
+global:
+  postgres: { host: postgres, existingSecret: order-platform-db }
+  kafka: { bootstrapServers: "kafka:9092" }
+  redis: { host: redis }
+
+security:
+  jwt: { existingSecret: orders-jwt }
+  devTokenEnabled: true          # LOCAL ONLY
+
+rateLimit:                       # a test run sends everything from one address; keep the limiter out of the way
+  orderServicePerIpPerMinute: 100000000
+  gateway: { replenishPerSecond: 100000, burst: 100000 }
+
+tracing:
+  samplingProbability: "0"
+
+networkPolicy:
+  enabled: true                  # kind's default CNI does not enforce it; the objects are still rendered and applied
+
+# small footprint: one replica each, except the order service (2) so rolling updates can be tested for zero downtime
+services:
+  api-gateway:
+    replicas: 1
+    resources: { requests: { cpu: 50m, memory: 192Mi }, limits: { memory: 512Mi } }
+    autoscaling: { enabled: false }
+  order-service:
+    replicas: 2
+    resources: { requests: { cpu: 100m, memory: 256Mi }, limits: { memory: 640Mi } }
+    autoscaling: { enabled: false }
+  inventory-service:
+    replicas: 1
+    resources: { requests: { cpu: 100m, memory: 256Mi }, limits: { memory: 640Mi } }
+  payment-service:
+    replicas: 1
+    resources: { requests: { cpu: 100m, memory: 256Mi }, limits: { memory: 640Mi } }
+  catalog-service:
+    replicas: 1
+    resources: { requests: { cpu: 50m, memory: 192Mi }, limits: { memory: 512Mi } }
+  notification-service:
+    replicas: 1
+    resources: { requests: { cpu: 50m, memory: 192Mi }, limits: { memory: 384Mi } }

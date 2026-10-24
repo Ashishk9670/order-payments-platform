@@ -31,6 +31,7 @@ class HttpPaymentGatewayTest {
     final AtomicInteger flakyHits = new AtomicInteger();
     final AtomicInteger downHits = new AtomicInteger();
     final AtomicInteger rejectedHits = new AtomicInteger();
+    final AtomicInteger garbageHits = new AtomicInteger();
     volatile String chargeBody = "{\"status\":\"approved\"}";
 
     @BeforeEach
@@ -51,6 +52,19 @@ class HttpPaymentGatewayTest {
             } else {
                 reply(ex, 200, "{\"status\":\"approved\"}");
             }
+        });
+        psp.createContext("/odd-content-type/v1/charges", ex -> {
+            record(ex);
+            byte[] bytes = "{\"status\":\"approved\",\"processor_reference\":\"ch_123\",\"extra\":{\"x\":1}}".getBytes(StandardCharsets.UTF_8);
+            ex.getResponseHeaders().add("Content-Type", "application/octet-stream");
+            ex.sendResponseHeaders(200, bytes.length);
+            ex.getResponseBody().write(bytes);
+            ex.close();
+        });
+        psp.createContext("/garbage/v1/charges", ex -> {
+            record(ex);
+            garbageHits.incrementAndGet();
+            reply(ex, 200, "<html>maintenance page</html>");
         });
         psp.createContext("/down/v1/charges", ex -> {
             downHits.incrementAndGet();
@@ -170,5 +184,25 @@ class HttpPaymentGatewayTest {
 
         assertThat(result.approved()).isFalse();
         assertThat(result.declineReason()).isEqualTo("Payment provider unavailable");
+    }
+
+    @Test
+    void anyContentTypeAndUnknownFieldsAreAccepted() {
+        var result = gatewayFor("/odd-content-type", "").authorize(UUID.randomUUID(), BigDecimal.TEN);
+
+        assertThat(result.approved()).isTrue();
+    }
+
+    @Test
+    void anUnreadableSuccessResponseIsRetriedWithTheSameKeyAndNeverTreatedAsADecline() {
+        var orderId = UUID.randomUUID();
+
+        var result = gatewayFor("/garbage", "").authorize(orderId, BigDecimal.TEN);
+
+        // the charge may have gone through, so we retried (same key => the processor would replay its answer)
+        assertThat(garbageHits.get()).isEqualTo(3);
+        assertThat(idempotencyKeys).hasSize(3).containsOnly("charge-" + orderId);
+        assertThat(result.approved()).isFalse();
+        assertThat(result.declineReason()).isEqualTo("Payment provider unavailable");   // not "declined by processor"
     }
 }

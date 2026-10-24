@@ -1,0 +1,23 @@
+# Minimal Alertmanager config: alerts are grouped and visible in its UI (http://localhost:9093).
+# To get notified, replace the "default" receiver, for example with Slack:
+#   receivers:
+#     - name: default
+#       slack_configs:
+#         - api_url_file: /etc/alertmanager/slack-webhook   # mount your webhook as a file; never commit it
+#           channel: "#orders-alerts"
+route:
+  receiver: default
+  group_by: [alertname, application]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    - matchers: [severity="critical"]
+      receiver: default
+      repeat_interval: 1h
+receivers:
+  - name: default
+inhibit_rules:
+  - source_matchers: [alertname="ServiceDown"]
+    target_matchers: [severity=~"warning|critical"]
+    equal: [application]

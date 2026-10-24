@@ -1,11 +1,12 @@
 import AxeBuilder from '@axe-core/playwright';
 import { devices, expect, test } from '@playwright/test';
 import { uid } from '../../support/api';
+import { catalogLoaded } from '../../support/ui';
 
 test.describe('accessibility (WCAG 2.1 A/AA)', () => {
   test('the storefront has no automatically detectable violations', async ({ page }) => {
     await page.goto('/');
-    await expect(page.getByTestId('sku').locator('option')).not.toHaveCount(1);
+    await catalogLoaded(page);
 
     const results = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
 
@@ -14,7 +15,7 @@ test.describe('accessibility (WCAG 2.1 A/AA)', () => {
 
   test('still clean after an order result is shown (status badge, reason, cancel button)', async ({ page }) => {
     await page.goto('/');
-    await expect(page.getByTestId('sku').locator('option')).not.toHaveCount(1);
+    await catalogLoaded(page);
     await page.getByTestId('customer-id').fill(uid('a11y'));
     await page.getByTestId('preset-decline').click();
     await page.getByTestId('place-order').click();
@@ -29,7 +30,7 @@ test.describe('accessibility (WCAG 2.1 A/AA)', () => {
     const context = await browser.newContext({ colorScheme: 'dark' });
     const page = await context.newPage();
     await page.goto('/');
-    await expect(page.getByTestId('sku').locator('option')).not.toHaveCount(1);
+    await catalogLoaded(page);
 
     const results = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
 
@@ -47,7 +48,7 @@ test.describe('accessibility (WCAG 2.1 A/AA)', () => {
 
   test('the whole purchase flow works with the keyboard only', async ({ page }) => {
     await page.goto('/');
-    await expect(page.getByTestId('sku').locator('option')).not.toHaveCount(1);
+    await catalogLoaded(page);
     await page.getByTestId('customer-id').fill(uid('kbd'));
 
     await page.getByTestId('customer-id').press('Tab');        // -> product
@@ -82,7 +83,7 @@ test.describe('responsive layout', () => {
 
   test('no horizontal scrolling and the form is usable on a phone', async ({ page }) => {
     await page.goto('/');
-    await expect(page.getByTestId('sku').locator('option')).not.toHaveCount(1);
+    await catalogLoaded(page);
 
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     expect(overflow).toBeLessThanOrEqual(0);
@@ -91,7 +92,7 @@ test.describe('responsive layout', () => {
 
   test('an order can be placed on a phone-sized screen', async ({ page }) => {
     await page.goto('/');
-    await expect(page.getByTestId('sku').locator('option')).not.toHaveCount(1);
+    await catalogLoaded(page);
     await page.getByTestId('customer-id').fill(uid('mobile'));
     await page.getByTestId('sku').selectOption('SKU-1002');
 

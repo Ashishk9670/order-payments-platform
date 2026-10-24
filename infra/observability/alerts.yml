@@ -1,0 +1,110 @@
+# Alert rules. Thresholds are starting points: tune them with the capacity numbers in docs/capacity.md.
+# Every alert links to a runbook in docs/runbooks/.
+groups:
+  - name: order-platform-availability
+    rules:
+      - alert: ServiceDown
+        expr: up == 0
+        for: 2m
+        labels: { severity: critical }
+        annotations:
+          summary: "{{ $labels.job }} is down"
+          runbook: docs/runbooks/service-down.md
+
+      - alert: HighErrorRate
+        expr: |
+          sum by (application) (rate(http_server_requests_seconds_count{status=~"5.."}[5m]))
+            / sum by (application) (rate(http_server_requests_seconds_count[5m])) > 0.05
+        for: 5m
+        labels: { severity: critical }
+        annotations:
+          summary: "{{ $labels.application }}: more than 5% of requests fail with 5xx"
+          runbook: docs/runbooks/high-error-rate.md
+
+      - alert: HighLatency
+        expr: |
+          histogram_quantile(0.95, sum by (le, application) (rate(http_server_requests_seconds_bucket[5m]))) > 1
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "{{ $labels.application }}: p95 latency above 1s"
+          runbook: docs/runbooks/high-latency.md
+
+  - name: order-platform-messaging
+    rules:
+      - alert: OutboxBacklogGrowing
+        expr: sum by (application) (outbox_pending) > 50
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "{{ $labels.application }}: {{ $value }} events written but not yet published to Kafka"
+          runbook: docs/runbooks/outbox-backlog.md
+
+      - alert: OutboxBacklogCritical
+        expr: sum by (application) (outbox_pending) > 500
+        for: 5m
+        labels: { severity: critical }
+        annotations:
+          summary: "{{ $labels.application }}: outbox backlog above 500, orders are not progressing"
+          runbook: docs/runbooks/outbox-backlog.md
+
+      - alert: OutboxPublishFailing
+        expr: sum by (application) (rate(outbox_publish_failures_total[5m])) > 0
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "{{ $labels.application }}: publishing to Kafka keeps failing"
+          runbook: docs/runbooks/outbox-backlog.md
+
+      - alert: KafkaConsumerLag
+        expr: max by (application, topic) (kafka_consumer_fetch_manager_records_lag_max) > 1000
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "{{ $labels.application }} is {{ $value }} records behind on {{ $labels.topic }}"
+          runbook: docs/runbooks/consumer-lag.md
+
+      - alert: DeadLetterTopicNotEmpty
+        expr: sum by (application) (increase(dead_letter_records_total[15m])) > 0
+        for: 0m
+        labels: { severity: warning }
+        annotations:
+          summary: "{{ $labels.application }} parked messages on a dead-letter topic"
+          runbook: docs/runbooks/dead-letters.md
+
+  - name: order-platform-business
+    rules:
+      - alert: OrdersStuck
+        expr: sum by (status) (orders_stuck) > 0
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "{{ $value }} orders stuck in {{ $labels.status }}"
+          runbook: docs/runbooks/stuck-orders.md
+
+      - alert: HighCancellationRate
+        expr: |
+          sum(rate(orders_transitions_total{status="CANCELLED"}[15m])) / sum(rate(orders_placed_total[15m])) > 0.3
+        for: 15m
+        labels: { severity: warning }
+        annotations:
+          summary: "More than 30% of orders are being cancelled"
+          runbook: docs/runbooks/high-cancellation-rate.md
+
+      - alert: CircuitBreakerOpen
+        expr: resilience4j_circuitbreaker_state{state="open"} == 1
+        for: 2m
+        labels: { severity: critical }
+        annotations:
+          summary: "Circuit {{ $labels.name }} is open in {{ $labels.application }}"
+          runbook: docs/runbooks/circuit-open.md
+
+  - name: order-platform-capacity
+    rules:
+      - alert: DatabasePoolSaturated
+        expr: sum by (application) (hikaricp_connections_pending) > 0
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "{{ $labels.application }}: requests are waiting for a database connection"
+          runbook: docs/runbooks/db-pool.md

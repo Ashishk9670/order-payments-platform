@@ -1,0 +1,21 @@
+{
+  "priority": 1,
+  "request": {
+    "method": "POST",
+    "urlPath": "/v1/charges",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$[?(@.amount == 66.66)]"
+      }
+    ]
+  },
+  "response": {
+    "status": 503,
+    "jsonBody": {
+      "error": "processor_down"
+    },
+    "headers": {
+      "Content-Type": "application/json"
+    }
+  }
+}

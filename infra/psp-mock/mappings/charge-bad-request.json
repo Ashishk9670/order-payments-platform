@@ -1,0 +1,21 @@
+{
+  "priority": 1,
+  "request": {
+    "method": "POST",
+    "urlPath": "/v1/charges",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$[?(@.amount == 13.13)]"
+      }
+    ]
+  },
+  "response": {
+    "status": 402,
+    "jsonBody": {
+      "error": "payment_required"
+    },
+    "headers": {
+      "Content-Type": "application/json"
+    }
+  }
+}

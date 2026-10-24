@@ -1,0 +1,12 @@
+# Overlay: publish outbox events with Debezium (log-based CDC) instead of the polling relay.
+#   docker compose -f docker-compose.yml -f docker-compose.cdc.yml --profile apps --profile cdc up -d
+#   POSTGRES_PASSWORD=postgres scripts/register-debezium.sh
+services:
+  order-service: &cdc
+    environment:
+      OUTBOX_RELAY_ENABLED: "false"     # no polling relay: Debezium reads the database log
+      OUTBOX_CDC_ENABLED: "true"        # rows are deleted right after insert (the log still carries them)
+  inventory-service:
+    <<: *cdc
+  payment-service:
+    <<: *cdc
