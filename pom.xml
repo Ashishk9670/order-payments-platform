@@ -33,7 +33,7 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <argLine></argLine>   <!-- filled in by the jacoco agent; surefire/failsafe append to it -->
         <coverage.line.min>0.00</coverage.line.min>
-        <spring-boot.version>3.5.6</spring-boot.version>
+        <spring-boot.version>3.5.16</spring-boot.version>
         <testcontainers.version>1.21.3</testcontainers.version>
         <resilience4j.version>2.3.0</resilience4j.version>
         <spring-cloud.version>2025.0.1</spring-cloud.version>
