@@ -80,30 +80,18 @@ jobs:
 
       # Scan the exact image that was pushed (by digest). Fixable HIGH/CRITICAL findings fail the job; the "unfixed" ones
       # (no patch exists yet) are ignored so the gate only blocks on things someone can actually do something about.
-      - name: List fixable HIGH/CRITICAL findings (readable, never fails)
-        uses: aquasecurity/trivy-action@v0.33.1
-        with:
-          image-ref: ${{ steps.image.outputs.ref }}
-          severity: HIGH,CRITICAL
-          ignore-unfixed: true
-          exit-code: "0"
-          format: table
-        env:
-          TRIVY_USERNAME: ${{ github.actor }}
-          TRIVY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
-
+      # Run the official Trivy image directly (the setup action failed to install the binary on the runner).
+      # Pass 1 prints the findings in the job log and never fails; pass 2 writes SARIF and is the gate.
       - name: Scan the image for vulnerabilities (Trivy)
-        uses: aquasecurity/trivy-action@v0.33.1
-        with:
-          image-ref: ${{ steps.image.outputs.ref }}
-          severity: HIGH,CRITICAL
-          ignore-unfixed: true
-          exit-code: "1"
-          format: sarif
-          output: trivy-${{ matrix.module }}.sarif
         env:
+          IMAGE: ${{ steps.image.outputs.ref }}
           TRIVY_USERNAME: ${{ github.actor }}
           TRIVY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+          TRIVY: docker run --rm -e TRIVY_USERNAME -e TRIVY_PASSWORD -v ${{ github.workspace }}:/out aquasec/trivy:0.65.0
+        run: |
+          $TRIVY image --severity HIGH,CRITICAL --ignore-unfixed --format table "$IMAGE" || true
+          $TRIVY image --severity HIGH,CRITICAL --ignore-unfixed --format sarif --output /out/trivy-${{ matrix.module }}.sarif "$IMAGE"
+          $TRIVY image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 --quiet "$IMAGE"
 
       - name: Upload scan results
         if: always() && hashFiles(format('trivy-{0}.sarif', matrix.module)) != ''
