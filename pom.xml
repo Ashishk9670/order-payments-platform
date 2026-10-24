@@ -39,6 +39,7 @@
         <tomcat.override>10.1.61</tomcat.override>
         <netty.override>4.1.137.Final</netty.override>
         <postgresql.override>42.7.12</postgresql.override>
+        <bouncycastle.override>1.86</bouncycastle.override>
         <testcontainers.version>1.21.3</testcontainers.version>
         <resilience4j.version>2.3.0</resilience4j.version>
         <spring-cloud.version>2025.0.1</spring-cloud.version>
@@ -87,6 +88,11 @@
                 <groupId>org.postgresql</groupId>
                 <artifactId>postgresql</artifactId>
                 <version>${postgresql.override}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.bouncycastle</groupId>
+                <artifactId>bcprov-jdk18on</artifactId>
+                <version>${bouncycastle.override}</version>
             </dependency>
             <dependency>
                 <groupId>org.springframework.boot</groupId>

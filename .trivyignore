@@ -4,6 +4,8 @@
 # that needs its own change. Exit: migrate to Spring Boot 4 (tracked in docs/adr).
 CVE-2026-47884
 CVE-2026-47890
+# spring-webflux (api-gateway) has the same Spring Framework 7-only fix
+CVE-2026-47892
 
 # Go standard library (1.27.1) inside the base image's /usr/bin/pebble (the image's init process), not code we build; we never expose
 # it to network input. Exit: rebuild on a
