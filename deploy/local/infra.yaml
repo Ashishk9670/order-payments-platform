@@ -14,6 +14,7 @@ data:
     CREATE DATABASE inventory;
     CREATE DATABASE payments;
     CREATE DATABASE catalog;
+    CREATE DATABASE shipping;
 ---
 apiVersion: apps/v1
 kind: Deployment

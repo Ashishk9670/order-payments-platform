@@ -85,5 +85,10 @@ helm.sh/chart: {{ printf "%s-%s" .root.Chart.Name .root.Chart.Version }}
     secretKeyRef: { name: {{ $v.payment.psp.existingSecret }}, key: {{ $v.payment.psp.apiKeyKey }} }
 {{- end }}
 {{- end }}
+{{- if $v.payment.psp.webhookExistingSecret }}
+- name: PSP_WEBHOOK_SECRET
+  valueFrom:
+    secretKeyRef: { name: {{ $v.payment.psp.webhookExistingSecret }}, key: {{ $v.payment.psp.webhookSecretKey }} }
+{{- end }}
 {{- end }}
 {{- end -}}

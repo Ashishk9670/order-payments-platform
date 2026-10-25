@@ -15,6 +15,9 @@ security:
   jwt: { existingSecret: orders-jwt }
   devTokenEnabled: true          # LOCAL ONLY
 
+payment:
+  psp: { webhookExistingSecret: orders-psp-webhook }   # created next to orders-jwt
+
 rateLimit:                       # a test run sends everything from one address; keep the limiter out of the way
   orderServicePerIpPerMinute: 100000000
   gateway: { replenishPerSecond: 100000, burst: 100000 }
@@ -44,6 +47,9 @@ services:
   catalog-service:
     replicas: 1
     resources: { requests: { cpu: 50m, memory: 192Mi }, limits: { memory: 512Mi } }
+  shipping-service:
+    replicas: 1
+    resources: { requests: { cpu: 100m, memory: 256Mi }, limits: { memory: 640Mi } }
   notification-service:
     replicas: 1
     resources: { requests: { cpu: 50m, memory: 192Mi }, limits: { memory: 384Mi } }

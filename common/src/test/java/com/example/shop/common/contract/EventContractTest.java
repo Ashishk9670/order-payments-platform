@@ -10,6 +10,8 @@ import com.example.shop.common.events.OrderCancellationRequested;
 import com.example.shop.common.events.OrderCancelled;
 import com.example.shop.common.events.OrderConfirmed;
 import com.example.shop.common.events.OrderCreated;
+import com.example.shop.common.events.OrderDelivered;
+import com.example.shop.common.events.OrderShipped;
 import com.example.shop.common.events.PaymentAuthorized;
 import com.example.shop.common.events.PaymentFailed;
 import com.example.shop.common.events.PaymentRefundFailed;
@@ -60,7 +62,9 @@ class EventContractTest {
                 OrderCancellationRequested.of(ORDER, "changed my mind"),
                 PaymentRefunded.of(ORDER, UUID.randomUUID()),
                 PaymentRefundFailed.of(ORDER, "psp down"),
-                InventoryExpired.of(ORDER, "Reservation expired"));
+                InventoryExpired.of(ORDER, "Reservation expired"),
+                OrderShipped.of(ORDER, "DHL", "TRACK-123"),
+                OrderDelivered.of(ORDER));
     }
 
     private static JsonNode load(String resource) throws Exception {

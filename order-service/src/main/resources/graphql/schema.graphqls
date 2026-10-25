@@ -1,8 +1,10 @@
 type Query {
     "Fetch one order by id."
     order(id: ID!): Order
-    "Newest first. size is capped at 100."
-    ordersByCustomer(customerId: String!, page: Int = 0, size: Int = 20): [Order!]!
+    "Newest first, optionally only one status. size is capped at 100."
+    ordersByCustomer(customerId: String!, status: OrderStatus, page: Int = 0, size: Int = 20): [Order!]!
+    "How many orders match (all of them, not just one page): lets a client know where the last page is."
+    orderCountByCustomer(customerId: String!, status: OrderStatus): Int!
 }
 
 type Mutation {
@@ -35,6 +37,15 @@ type Order {
     cancelReason: String
     createdAt: String!
     items: [OrderItem!]!
+    "Null until the parcel has left the warehouse."
+    fulfillment: Fulfillment
+    carrier: String
+    trackingNumber: String
+}
+
+enum Fulfillment {
+    SHIPPED
+    DELIVERED
 }
 
 type OrderItem {

@@ -7,6 +7,7 @@ import jakarta.validation.Valid;
 import java.net.URI;
 import java.util.List;
 import java.util.UUID;
+import com.example.shop.order.domain.OrderStatus;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -83,12 +84,15 @@ public class OrderController {
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(view);
     }
 
+    /** Newest first. {@code X-Total-Count} (all matching orders, not just this page) lets a client show "page 2 of 7". */
     @GetMapping
-    public List<OrderView> list(@RequestParam String customerId,
-                                @RequestParam(defaultValue = "0") int page,
-                                @RequestParam(defaultValue = "20") int size) {
+    public ResponseEntity<List<OrderView>> list(@RequestParam String customerId,
+                                                @RequestParam(required = false) OrderStatus status,
+                                                @RequestParam(defaultValue = "0") int page,
+                                                @RequestParam(defaultValue = "20") int size) {
         access.requireAccess(customerId);
-        return orders.listByCustomer(customerId, Math.max(page, 0), Math.min(Math.max(size, 1), 100));
+        List<OrderView> body = orders.listByCustomer(customerId, status, Math.max(page, 0), Math.min(Math.max(size, 1), 100));
+        return ResponseEntity.ok().header("X-Total-Count", String.valueOf(orders.countByCustomer(customerId, status))).body(body);
     }
 
     private static ResponseEntity<OrderView> accepted(OrderView view) {

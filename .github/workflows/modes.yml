@@ -104,16 +104,16 @@ jobs:
           CONNECT_URL=http://localhost:8089 POSTGRES_PASSWORD=postgres ./scripts/register-debezium.sh
           for i in $(seq 1 60); do
             running=$(curl -fsS 'localhost:8089/connectors?expand=status' | python3 -c "import sys,json; d=json.load(sys.stdin); print(sum(1 for v in d.values() if v['status']['connector']['state']=='RUNNING' and v['status']['tasks'] and all(t['state']=='RUNNING' for t in v['status']['tasks'])))")
-            [ "$running" = "3" ] && exit 0
+            [ "$running" = "4" ] && exit 0
             sleep 3
           done
           echo "connectors did not reach RUNNING" >&2; curl -s 'localhost:8089/connectors?expand=status'; exit 1
       - name: Order and refund sagas with Debezium as the only publisher
         working-directory: e2e
-        run: npx playwright test --project=api -g "saga|refund"
+        run: npx playwright test --project=api -g "saga|refund|shipping"
       - name: The outbox is drained (rows are deleted after insert in CDC mode)
         run: |
-          for db in orders inventory payments; do
+          for db in orders inventory payments shipping; do
             n=$(docker compose exec -T postgres psql -U postgres -d $db -tAc "select count(*) from outbox_event where published_at is null")
             echo "$db unpublished rows: $n"; [ "$n" = "0" ]
           done

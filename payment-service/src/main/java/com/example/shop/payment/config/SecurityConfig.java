@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -32,6 +33,10 @@ public class SecurityConfig {
                         // validation failures and unknown routes are rendered through the container's /error dispatch; if that
                         // were denied, a 400 would turn into a 403 and hide the real problem from the caller
                         .requestMatchers("/error").permitAll()
+                        // the processor cannot hold one of our tokens: its requests are authenticated by the HMAC signature the
+                        // controller verifies (unsigned or stale ones are answered 401 there)
+                        .requestMatchers(HttpMethod.POST, "/webhooks/psp").permitAll()
+                        .requestMatchers("/api/v1/payments/webhook-events").hasRole(Roles.ADMIN)   // raw processor payloads: operators only
                         .requestMatchers("/api/v1/payments/**").hasAnyRole(Roles.ADMIN, Roles.SERVICE)
                         .anyRequest().denyAll())
                 .oauth2ResourceServer(o -> o

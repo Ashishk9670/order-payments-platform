@@ -195,6 +195,30 @@ class OrderSagaListenerTest {
         verify(outbox, never()).publish(any(), any());
     }
 
+    // ---- shipping ------------------------------------------------------------------------------------------------------
+
+    @Test
+    void shippingAndDeliveryAreRecordedOnAConfirmedOrder() throws Exception {
+        order.markInventoryReserved();
+        order.confirm();
+
+        listener.onShipped(json(com.example.shop.common.events.OrderShipped.of(order.getId(), "DHL", "TRACK-1")));
+        assertThat(order.getFulfillment()).isEqualTo(com.example.shop.order.domain.Fulfillment.SHIPPED);
+        assertThat(order.getTrackingNumber()).isEqualTo("TRACK-1");
+        verify(spring).publishEvent(new OrderChanged(order.getId()));   // cached views must refresh
+
+        listener.onDelivered(json(com.example.shop.common.events.OrderDelivered.of(order.getId())));
+        assertThat(order.getFulfillment()).isEqualTo(com.example.shop.order.domain.Fulfillment.DELIVERED);
+    }
+
+    @Test
+    void aShippedEventForAnOrderThatIsNotConfirmedIsIgnored() throws Exception {
+        listener.onShipped(json(com.example.shop.common.events.OrderShipped.of(order.getId(), "DHL", "T")));
+
+        assertThat(order.getFulfillment()).isNull();
+        verify(spring, never()).publishEvent(any(OrderChanged.class));
+    }
+
     // ---- reservation expiry and the payment that arrives too late -----------------------------------------------------
 
     @Test

@@ -25,7 +25,7 @@ public class ArchitectureTest {
     @Test
     void servicesDoNotDependOnEachOther() {
         noClasses().that().resideInAPackage("com.example.shop.payment..")
-          .should().dependOnClassesThat().resideInAnyPackage("com.example.shop.order..", "com.example.shop.inventory..", "com.example.shop.catalog..", "com.example.shop.notification..", "com.example.shop.gateway..")
+          .should().dependOnClassesThat().resideInAnyPackage("com.example.shop.order..", "com.example.shop.inventory..", "com.example.shop.catalog..", "com.example.shop.notification..", "com.example.shop.gateway..", "com.example.shop.shipping..")
                 .check(CLASSES);
     }
 

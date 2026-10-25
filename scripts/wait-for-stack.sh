@@ -2,7 +2,7 @@
 # Blocks until every service answers /actuator/health with UP (or fails after TIMEOUT seconds).
 set -euo pipefail
 TIMEOUT="${TIMEOUT:-240}"
-ports=(8080 8081 8082 8083 8084 8085)
+ports=(8080 8081 8082 8083 8084 8085 8086)
 deadline=$((SECONDS + TIMEOUT))
 for port in "${ports[@]}"; do
   until curl -fsS "http://localhost:${port}/actuator/health" 2>/dev/null | grep -q '"status":"UP"'; do

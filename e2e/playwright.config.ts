@@ -5,6 +5,7 @@ export const URLS = {
   order: process.env.ORDER_URL ?? 'http://localhost:8081',
   inventory: process.env.INVENTORY_URL ?? 'http://localhost:8082',
   payment: process.env.PAYMENT_URL ?? 'http://localhost:8083',
+  shipping: process.env.SHIPPING_URL ?? 'http://localhost:8086',
   notification: process.env.NOTIFICATION_URL ?? 'http://localhost:8084',
   catalog: process.env.CATALOG_URL ?? 'http://localhost:8085',
   gateway: process.env.GATEWAY_URL ?? 'http://localhost:8080',

@@ -57,7 +57,7 @@ class OrderControllerTest {
 
     private final UUID id = UUID.randomUUID();
     private final OrderView view = new OrderView(id, "cust-1", OrderStatus.PENDING, new BigDecimal("20.00"), null,
-            Instant.now(), List.of(new OrderView.ItemView("SKU-1001", 2, new BigDecimal("10.00"))));
+            Instant.now(), List.of(new OrderView.ItemView("SKU-1001", 2, new BigDecimal("10.00"))), null, null, null);
 
     @BeforeEach
     void setUp() throws Exception {
@@ -192,12 +192,30 @@ class OrderControllerTest {
     void customerCannotListSomeoneElsesOrders() throws Exception {
         mvc.perform(get("/api/v1/orders").param("customerId", "cust-1").with(as("mallory")))
                 .andExpect(status().isForbidden());
-        verify(orders, never()).listByCustomer(any(), org.mockito.ArgumentMatchers.anyInt(), org.mockito.ArgumentMatchers.anyInt());
+        verify(orders, never()).listByCustomer(any(), any(), org.mockito.ArgumentMatchers.anyInt(), org.mockito.ArgumentMatchers.anyInt());
+    }
+
+    @Test
+    void listingReportsTheTotalAndHonoursTheStatusFilter() throws Exception {
+        when(orders.listByCustomer("cust-1", OrderStatus.CONFIRMED, 1, 2)).thenReturn(List.of(view));
+        when(orders.countByCustomer("cust-1", OrderStatus.CONFIRMED)).thenReturn(7L);
+
+        mvc.perform(get("/api/v1/orders").param("customerId", "cust-1").param("status", "CONFIRMED")
+                        .param("page", "1").param("size", "2").with(as("cust-1")))
+                .andExpect(status().isOk())
+                .andExpect(header().string("X-Total-Count", "7"))
+                .andExpect(jsonPath("$[0].id").value(id.toString()));
+    }
+
+    @Test
+    void anUnknownStatusFilterIs400() throws Exception {
+        mvc.perform(get("/api/v1/orders").param("customerId", "cust-1").param("status", "NOPE").with(as("cust-1")))
+                .andExpect(status().isBadRequest());
     }
 
     @Test
     void customerCanListTheirOwnOrders() throws Exception {
-        when(orders.listByCustomer("cust-1", 0, 20)).thenReturn(List.of(view));
+        when(orders.listByCustomer("cust-1", null, 0, 20)).thenReturn(List.of(view));
 
         mvc.perform(get("/api/v1/orders").param("customerId", "cust-1").with(as("cust-1")))
                 .andExpect(status().isOk()).andExpect(jsonPath("$[0].id").value(id.toString()));
@@ -206,7 +224,7 @@ class OrderControllerTest {
     @Test
     void adminCanReadAndListAnyCustomersOrders() throws Exception {
         when(orders.get(id)).thenReturn(view);
-        when(orders.listByCustomer("cust-1", 0, 20)).thenReturn(List.of(view));
+        when(orders.listByCustomer("cust-1", null, 0, 20)).thenReturn(List.of(view));
 
         mvc.perform(get("/api/v1/orders/" + id).with(admin())).andExpect(status().isOk());
         mvc.perform(get("/api/v1/orders").param("customerId", "cust-1").with(admin())).andExpect(status().isOk());

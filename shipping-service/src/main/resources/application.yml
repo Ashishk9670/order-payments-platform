@@ -1,0 +1,66 @@
+server:
+  port: 8086
+
+spring:
+  application:
+    name: shipping-service
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/shipping?connectTimeout=3&socketTimeout=15}
+    username: ${DB_USER:postgres}
+    password: ${DB_PASSWORD:postgres}
+    hikari:
+      connection-timeout: ${DB_CONNECTION_TIMEOUT_MS:3000}   # waiting for a connection beyond this fails the request (503) instead of hanging
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    locations: classpath:db/migration,classpath:db/common
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP:localhost:9092}
+    template:
+      observation-enabled: true     # trace context travels in Kafka record headers
+    listener:
+      observation-enabled: true
+    producer:
+      acks: all
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      properties:
+        enable.idempotence: true
+    consumer:
+      auto-offset-reset: earliest
+      properties:
+        # notice topics created by another service within seconds, not the 5-minute default
+        metadata.max.age.ms: 10000
+      enable-auto-commit: false
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+
+management:
+  metrics:
+    tags:
+      application: ${spring.application.name}
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+  tracing:
+    sampling:
+      probability: ${TRACING_SAMPLING:1.0}   # sample everything locally; lower it (e.g. 0.05) under production load
+  otlp:
+    tracing:
+      endpoint: ${OTLP_TRACING_ENDPOINT:http://localhost:4318/v1/traces}
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+security:
+  # HS256 shared secret for local/dev/CI. In production leave it empty and set
+  # spring.security.oauth2.resourceserver.jwt.issuer-uri (or jwk-set-uri) instead.
+  jwt:
+    secret: ${JWT_SECRET:}

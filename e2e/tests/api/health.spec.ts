@@ -3,7 +3,7 @@ import { URLS } from '../../playwright.config';
 
 // Only the application services expose /actuator/health. URLS also holds helper endpoints (the mock card processor, Keycloak)
 // that exist only in opt-in modes, so they must not be iterated here.
-const APP_SERVICES = ['gateway', 'order', 'inventory', 'payment', 'notification', 'catalog'] as const;
+const APP_SERVICES = ['gateway', 'order', 'inventory', 'payment', 'notification', 'catalog', 'shipping'] as const;
 
 for (const name of APP_SERVICES) {
   test(`${name}-service reports UP`, async ({ request }) => {

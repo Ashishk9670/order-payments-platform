@@ -1,7 +1,10 @@
 package com.example.shop.payment.config;
 
 import com.example.shop.common.CommonConfig;
+import java.time.Clock;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.domain.EntityScan;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
@@ -12,4 +15,10 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 @EntityScan({"com.example.shop.payment", "com.example.shop.common"})
 @EnableJpaRepositories({"com.example.shop.payment", "com.example.shop.common"})
 class InfrastructureConfig {
+
+    @Bean
+    @ConditionalOnMissingBean
+    Clock clock() {
+        return Clock.systemUTC();
+    }
 }

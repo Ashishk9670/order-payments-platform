@@ -31,6 +31,11 @@ public class Order {
     private BigDecimal totalAmount;
     @Column(name = "cancel_reason")
     private String cancelReason;
+    @Enumerated(EnumType.STRING)
+    private Fulfillment fulfillment;
+    private String carrier;
+    @Column(name = "tracking_number")
+    private String trackingNumber;
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
     @Column(name = "updated_at", nullable = false)
@@ -93,9 +98,9 @@ public class Order {
         return true;
     }
 
-    /** Customer-initiated cancellation: only a confirmed order can be refunded. */
+    /** Customer-initiated cancellation: only a confirmed order that has not left the warehouse can be refunded. */
     public boolean requestCancellation(String reason) {
-        if (status != OrderStatus.CONFIRMED) {
+        if (status != OrderStatus.CONFIRMED || fulfillment != null) {
             return false;
         }
         this.cancelReason = reason;
@@ -118,6 +123,27 @@ public class Order {
         }
         this.cancelReason = null;
         transition(OrderStatus.CONFIRMED);
+        return true;
+    }
+
+    /** The parcel left the warehouse. Only a confirmed order ships; a repeat or late event changes nothing. */
+    public boolean markShipped(String carrier, String trackingNumber) {
+        if (status != OrderStatus.CONFIRMED || fulfillment != null) {
+            return false;
+        }
+        this.fulfillment = Fulfillment.SHIPPED;
+        this.carrier = carrier;
+        this.trackingNumber = trackingNumber;
+        this.updatedAt = Instant.now();
+        return true;
+    }
+
+    public boolean markDelivered() {
+        if (fulfillment != Fulfillment.SHIPPED) {
+            return false;
+        }
+        this.fulfillment = Fulfillment.DELIVERED;
+        this.updatedAt = Instant.now();
         return true;
     }
 
@@ -144,6 +170,18 @@ public class Order {
 
     public String getCancelReason() {
         return cancelReason;
+    }
+
+    public Fulfillment getFulfillment() {
+        return fulfillment;
+    }
+
+    public String getCarrier() {
+        return carrier;
+    }
+
+    public String getTrackingNumber() {
+        return trackingNumber;
     }
 
     public Instant getUpdatedAt() {

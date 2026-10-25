@@ -5,6 +5,7 @@ import com.example.shop.order.api.OrderPlacementService;
 import com.example.shop.order.api.OrderService;
 import com.example.shop.order.api.PlaceOrderRequest;
 import com.example.shop.order.domain.Order;
+import com.example.shop.order.domain.Fulfillment;
 import com.example.shop.order.domain.OrderRepository;
 import com.example.shop.order.domain.OrderStatus;
 import com.example.shop.order.security.CurrentUser;
@@ -37,10 +38,10 @@ import reactor.core.scheduler.Schedulers;
 class OrderGraphQlController {
 
     record OrderSummary(UUID id, String customerId, OrderStatus status, BigDecimal totalAmount, String cancelReason,
-                        Instant createdAt) {
+                        Instant createdAt, Fulfillment fulfillment, String carrier, String trackingNumber) {
         static OrderSummary from(Order o) {
             return new OrderSummary(o.getId(), o.getCustomerId(), o.getStatus(), o.getTotalAmount(), o.getCancelReason(),
-                    o.getCreatedAt());
+                    o.getCreatedAt(), o.getFulfillment(), o.getCarrier(), o.getTrackingNumber());
         }
     }
 
@@ -71,10 +72,20 @@ class OrderGraphQlController {
     }
 
     @QueryMapping
-    List<OrderSummary> ordersByCustomer(@Argument String customerId, @Argument int page, @Argument int size) {
+    List<OrderSummary> ordersByCustomer(@Argument String customerId, @Argument OrderStatus status, @Argument int page,
+                                        @Argument int size) {
         access.requireAccess(customerId);
-        return orders.findByCustomerIdOrderByCreatedAtDesc(customerId,
-                PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100))).stream().map(OrderSummary::from).toList();
+        var paging = PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100));
+        var found = status == null
+                ? orders.findByCustomerIdOrderByCreatedAtDesc(customerId, paging)
+                : orders.findByCustomerIdAndStatusOrderByCreatedAtDesc(customerId, status, paging);
+        return found.stream().map(OrderSummary::from).toList();
+    }
+
+    @QueryMapping
+    int orderCountByCustomer(@Argument String customerId, @Argument OrderStatus status) {
+        access.requireAccess(customerId);
+        return (int) (status == null ? orders.countByCustomerId(customerId) : orders.countByCustomerIdAndStatus(customerId, status));
     }
 
     @MutationMapping

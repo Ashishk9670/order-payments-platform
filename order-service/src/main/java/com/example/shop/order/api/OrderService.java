@@ -4,8 +4,10 @@ import com.example.shop.common.events.OrderCancellationRequested;
 import com.example.shop.common.events.OrderCreated;
 import com.example.shop.common.events.Topics;
 import com.example.shop.common.outbox.OutboxService;
+import com.example.shop.order.domain.Fulfillment;
 import com.example.shop.order.domain.Order;
 import com.example.shop.order.domain.OrderRepository;
+import com.example.shop.order.domain.OrderStatus;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.util.List;
@@ -50,8 +52,10 @@ public class OrderService {
         Order order = orders.findWithItemsById(id).orElseThrow(() -> new OrderNotFoundException(id));
         String text = reason == null || reason.isBlank() ? "Cancelled by customer" : "Cancelled by customer: " + reason.trim();
         if (!order.requestCancellation(text)) {
-            throw new OrderStateConflictException(
-                    "Only confirmed orders can be cancelled; order is " + order.getStatus());
+            throw new OrderStateConflictException(order.getFulfillment() != null
+                    ? "The order has already " + (order.getFulfillment() == Fulfillment.SHIPPED ? "shipped" : "been delivered")
+                            + " and can no longer be cancelled"
+                    : "Only confirmed orders can be cancelled; order is " + order.getStatus());
         }
         outbox.publish(Topics.ORDER_CANCELLATION_REQUESTED, OrderCancellationRequested.of(id, text));
         events.publishEvent(new OrderChanged(id));
@@ -67,12 +71,27 @@ public class OrderService {
     /** Two queries total regardless of page size: the page of orders, then all their items at once. */
     @Transactional(readOnly = true)
     public List<OrderView> listByCustomer(String customerId, int page, int size) {
-        List<Order> page0 = orders.findByCustomerIdOrderByCreatedAtDesc(customerId, PageRequest.of(page, size));
+        return listByCustomer(customerId, null, page, size);
+    }
+
+    /** @param status only orders in this status, or all of them when null */
+    @Transactional(readOnly = true)
+    public List<OrderView> listByCustomer(String customerId, OrderStatus status, int page, int size) {
+        var paging = PageRequest.of(page, size);
+        List<Order> page0 = status == null
+                ? orders.findByCustomerIdOrderByCreatedAtDesc(customerId, paging)
+                : orders.findByCustomerIdAndStatusOrderByCreatedAtDesc(customerId, status, paging);
         Map<UUID, List<OrderView.ItemView>> items = orders.findItemRows(page0.stream().map(Order::getId).toList())
                 .stream().collect(Collectors.groupingBy(OrderRepository.ItemRow::orderId,
                         Collectors.mapping(r -> new OrderView.ItemView(r.sku(), r.quantity(), r.unitPrice()),
                                 Collectors.toList())));
         return page0.stream().map(o -> new OrderView(o.getId(), o.getCustomerId(), o.getStatus(), o.getTotalAmount(),
-                o.getCancelReason(), o.getCreatedAt(), items.getOrDefault(o.getId(), List.of()))).toList();
+                o.getCancelReason(), o.getCreatedAt(), items.getOrDefault(o.getId(), List.of()),
+                o.getFulfillment(), o.getCarrier(), o.getTrackingNumber())).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public long countByCustomer(String customerId, OrderStatus status) {
+        return status == null ? orders.countByCustomerId(customerId) : orders.countByCustomerIdAndStatus(customerId, status);
     }
 }

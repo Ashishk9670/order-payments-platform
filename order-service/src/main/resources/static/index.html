@@ -71,13 +71,24 @@
   <section class="card" aria-labelledby="history-h">
     <h2 id="history-h">Order history <span class="muted">(GraphQL)</span></h2>
     <div class="row" style="margin-top:0;margin-bottom:12px">
+      <label for="history-status" class="muted">Status</label>
+      <select id="history-status" data-testid="history-filter" aria-label="Filter orders by status">
+        <option value="">All</option>
+        <option>PENDING</option><option>INVENTORY_RESERVED</option><option>CONFIRMED</option>
+        <option>REFUND_PENDING</option><option>CANCELLED</option>
+      </select>
       <button type="button" id="refresh" data-testid="refresh-history">Refresh</button>
     </div>
     <table>
-      <thead><tr><th>Order</th><th>Status</th><th>Items</th><th>Total</th></tr></thead>
+      <thead><tr><th>Order</th><th>Status</th><th>Shipping</th><th>Items</th><th>Total</th></tr></thead>
       <tbody id="history" data-testid="history"></tbody>
     </table>
     <p id="history-empty" class="muted" data-testid="history-empty" hidden>No orders yet for this customer.</p>
+    <nav class="row" aria-label="Order history pages" style="margin-top:12px">
+      <button type="button" id="history-prev" data-testid="history-prev" disabled>Previous</button>
+      <span id="history-page" class="muted" data-testid="history-page" aria-live="polite">Page 1</span>
+      <button type="button" id="history-next" data-testid="history-next" disabled>Next</button>
+    </nav>
   </section>
 </main>
 
@@ -206,24 +217,47 @@
   }
 
   // ---- history (GraphQL query) -------------------------------------------------------------------------------------
+  const HISTORY_PAGE = 5;   // small on purpose: paging is visible with a handful of orders
+  let historyPage = 0;
+  let historyRequest = 0;   // only the latest request may draw: a slower, older response must not overwrite a newer page
   async function loadHistory() {
+    const mine = ++historyRequest;
     const customerId = $('customerId').value.trim();
     if (!customerId) return;
-    const query = `query($c:String!){ ordersByCustomer(customerId:$c){ id status totalAmount items{ sku quantity } } }`;
+    const status = $('history-status').value || null;
+    const query = `query($c:String!,$s:OrderStatus,$p:Int!,$n:Int!){
+      ordersByCustomer(customerId:$c,status:$s,page:$p,size:$n){ id status totalAmount fulfillment carrier trackingNumber items{ sku quantity } }
+      orderCountByCustomer(customerId:$c,status:$s) }`;
     const r = await api('/graphql', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query, variables: { c: customerId } }) }, customerId);
+      body: JSON.stringify({ query, variables: { c: customerId, s: status, p: historyPage, n: HISTORY_PAGE } }) }, customerId);
     const body = await r.json();
+    if (mine !== historyRequest) return;
     const orders = (body.data && body.data.ordersByCustomer) || [];
+    const total = (body.data && body.data.orderCountByCustomer) || 0;
+    if (orders.length === 0 && historyPage > 0) { historyPage = 0; return loadHistory(); }   // the page vanished (e.g. filter changed)
+    const hasNext = (historyPage + 1) * HISTORY_PAGE < total;
     $('history-empty').hidden = orders.length > 0;
+    $('history-prev').disabled = historyPage === 0;
+    $('history-next').disabled = !hasNext;
+    $('history-page').textContent = 'Page ' + (historyPage + 1);
     $('history').replaceChildren(...orders.map((o) => {
       const tr = document.createElement('tr');
       tr.setAttribute('data-testid', 'history-row');
-      tr.append(cell(o.id.slice(0, 8), 'code'), badgeCell(o.status),
+      tr.append(cell(o.id.slice(0, 8), 'code'), badgeCell(o.status), shippingCell(o),
         cell(o.items.map((i) => i.quantity + '\u00d7 ' + i.sku).join(', ')), cell(Number(o.totalAmount).toFixed(2)));
       return tr;
     }));
   }
+  $('history-prev').addEventListener('click', () => { historyPage = Math.max(0, historyPage - 1); loadHistory(); });
+  $('history-next').addEventListener('click', () => { historyPage += 1; loadHistory(); });
+  $('history-status').addEventListener('change', () => { historyPage = 0; loadHistory(); });
   function cell(text, tag) { const td = document.createElement('td'); if (tag) { const el = document.createElement(tag); el.textContent = text; td.append(el); } else td.textContent = text; return td; }
+  function shippingCell(o) {
+    const td = document.createElement('td');
+    td.setAttribute('data-testid', 'history-shipping');
+    td.textContent = !o.fulfillment ? '-' : o.fulfillment === 'DELIVERED' ? 'Delivered' : `Shipped (${o.carrier} ${o.trackingNumber})`;
+    return td;
+  }
   function badgeCell(status) { const td = document.createElement('td'); const s = document.createElement('span'); s.className = 'badge ' + status; s.textContent = status; td.append(s); return td; }
 
   // ---- actions -----------------------------------------------------------------------------------------------------

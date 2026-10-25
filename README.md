@@ -23,6 +23,7 @@ live subscriptions), an AsyncAPI contract, OAuth2/JWT security, an API gateway, 
                   └──────────────────┘  payment.failed /     └──────────────────┘
                                         payment.refunded
                   order.confirmed / order.cancelled ──► notification-service :8084
+                  order.confirmed ──► shipping-service :8086 ──► shipment.shipped / shipment.delivered ──► order-service
 ```
 
 Each service owns its PostgreSQL database. Services talk through Kafka events (and the one synchronous call to the
@@ -37,6 +38,22 @@ A stock shortage or a declined payment cancels the order; a declined payment als
 **Refund saga.** Cancelling a *confirmed* order moves it to `REFUND_PENDING`, payment refunds, inventory restocks,
 then the order becomes `CANCELLED`. If the processor refuses the refund, the order goes back to `CONFIRMED`.
 
+**Fulfilment.** A confirmed order enters the warehouse queue of `shipping-service` (`PENDING`). An operator ships it
+(`POST /api/v1/shipments/order/{id}/ship` with carrier and tracking number) and later marks it delivered; the order service
+learns both through events and shows them on the order (`fulfillment`, `carrier`, `trackingNumber`, in REST, GraphQL and the
+storefront history). Once shipped, cancellation is refused (`409`); cancelling *before* dispatch stops the parcel. A cancellation
+that overtakes the confirmation is remembered, so the late confirmation cannot start a shipment. A cancellation that races a
+dispatch inside the short window before the order service hears about it is counted (`shipments_cancel_too_late`) for manual follow-up.
+
+**Payment webhooks.** `POST /webhooks/psp` receives the card processor's asynchronous notifications. The request is authenticated
+by an HMAC-SHA256 signature over `<timestamp>.<body>` (`PSP-Signature: t=...,v1=...`, 5-minute tolerance against replays, constant-time
+comparison), events are stored once per processor event id (redelivery and concurrent delivery answer `duplicate`), and operators
+read them at `GET /api/v1/payments/webhook-events`. The endpoint does not exist (`404`) unless `PSP_WEBHOOK_SECRET` is set. Events are
+recorded for reconciliation; they deliberately do not change orders or payments by themselves.
+
+**Customer order history** is paged (`page`, `size`), filterable by `status`, and reports the total in `X-Total-Count` (REST) or
+`orderCountByCustomer` (GraphQL); the storefront shows 5 per page with Previous/Next and a status filter.
+
 **Prices are server-side.** The client sends SKUs and quantities only; `catalog-service` owns prices, and a client-supplied
 price is ignored (covered by a test).
 
@@ -49,7 +66,8 @@ price is ignored (covered by a test).
 | Event ordering across topics | None is assumed. Example: `PaymentAuthorized` may overtake `InventoryReserved`, so `confirm()` is accepted from `PENDING`; found by an integration test, fixed and unit-tested. |
 | Poison messages | Exponential-backoff retries, then `<topic>.DLT`. Malformed payloads are non-retryable and go straight to the DLT without blocking the partition (integration-tested). Parked records are counted (`dead_letter_records_total`, alerted) and an admin tool lists, replays or acknowledges them: `GET/POST /api/v1/admin/dlt/...` on the notification service ([runbook](docs/runbooks/dead-letters.md)). |
 | Abandoned orders | Stock is reserved with a TTL (`inventory.reservation-ttl`, 30 min). A sweeper releases unpaid reservations (`InventoryExpired`, which cancels the order); a payment that arrives *after* expiry is refunded automatically. Orders that sit in a non-final state too long are counted (`orders_stuck`) and listed at `GET /api/v1/admin/orders/stuck`. |
-| Dependency outages | Redis fails open (cache, rate limit, stock lock) except idempotent requests, which get an honest `503`; a hung database fails fast (JDBC/Hikari timeouts) with `503 + Retry-After`. Proven by the chaos suite below. || Ordering | Order id is the Kafka key, so one order's events stay in one partition. |
+| Dependency outages | Redis fails open (cache, rate limit, stock lock) except idempotent requests, which get an honest `503`; a hung database fails fast (JDBC/Hikari timeouts) with `503 + Retry-After`. Proven by the chaos suite below. |
+| Ordering | Order id is the Kafka key, so one order's events stay in one partition. |
 | Overselling | Atomic `UPDATE … WHERE available >= qty` is the guarantee; a Redis lock (sorted keys, token-checked release) only reduces contention. Multi-line orders are all-or-nothing. |
 | Duplicate client requests | `Idempotency-Key` header (`SET NX` in Redis, **scoped per customer**): `202` first time, `200` replay, `409` while in flight. |
 | AuthN / AuthZ | OAuth2 resource server. Customers see and cancel **only their own** orders (someone else's order is a `404`, so ids cannot be probed); `ADMIN` sees all. Same rules in REST and GraphQL. |
@@ -175,7 +193,7 @@ helm upgrade --install orders deploy/helm/order-platform \
 Misconfiguration is rejected at render time (for example `payment.gateway=http` without `payment.psp.url`, or TLS without a secret name).
 
 **Try it locally** on kind with throwaway infrastructure: build the images (`docker compose build`), retag them as `local/<service>:dev`,
-`kind load docker-image ...`, `kubectl apply -f deploy/local/infra.yaml`, create the `orders-jwt` secret, then
+`kind load docker-image ...`, `kubectl apply -f deploy/local/infra.yaml`, create the `orders-jwt` and `orders-psp-webhook` secrets, then
 `helm install orders deploy/helm/order-platform -f deploy/local/values-kind.yaml`. This was done for real: all pods ready with zero restarts,
 92 of 95 suite tests passing (the 3 were setup-specific and fixed), and 124 of 124 requests succeeding during a full rolling restart.
 kind's default network plugin does not enforce NetworkPolicies, so the policies are applied but not exercised there.
@@ -192,6 +210,8 @@ polling relay is safe because rows still in the table are picked up by the conne
 
 ## Contracts
 
+* Consumer-driven HTTP contract for the one synchronous call (order service -> catalog): [`contracts/catalog-get-product.v1.json`](contracts/catalog-get-product.v1.json). The order service's real client is tested against its example, the catalog's real responses against its schema, so a change on either side fails a build before it fails in production.
+
 * REST: `/api/v1/orders`, `/api/v1/products` (via the order service), plus the internal inventory/payment/catalog APIs.
 * GraphQL: `/graphql` (schema in `order-service/src/main/resources/graphql`).
 * Events: [`docs/asyncapi.yaml`](docs/asyncapi.yaml) and the JSON Schemas in `common/src/main/resources/schemas`.
@@ -201,7 +221,9 @@ polling relay is safe because rows still in the table are picked up by the conne
 * JSON event schemas with compatibility checks, **not** Avro/Protobuf with a schema registry ([ADR 4](docs/adr/0004-json-events-with-json-schema-contracts-instead-of-avro-and-a-schema-registry.md)).
 * The card processor is simulated by default; the HTTP adapter is tested against a local fake and WireMock, not a real processor sandbox.
 * The admin tools (dead-letter replay) act on whole topics, not individual records, and have no per-operator audit trail beyond the logs.
-* A refund releases stock back to inventory; shipping and fulfilment are out of scope; notifications are logged, not sent.
+* A refund releases stock back to inventory; notifications are logged, not sent. Shipping has no carrier integration: an operator records the dispatch through the API.
+* Existing local databases: Postgres only runs `infra/init-databases.sql` on a fresh volume, so after pulling the shipping service run `docker compose exec postgres psql -U postgres -c "CREATE DATABASE shipping"` (or `docker compose down -v`).
+* Three CVEs in Spring Framework 6.2 (`spring-webmvc`/`spring-webflux`) have a fix only in Spring Framework 7 / Spring Boot 4 and are listed with reasons in `.trivyignore`; so are four in the base image's Go `pebble` binary.
 
 ## License
 

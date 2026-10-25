@@ -35,7 +35,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        module: [api-gateway, order-service, inventory-service, payment-service, catalog-service, notification-service]
+        module: [api-gateway, order-service, inventory-service, payment-service, catalog-service, notification-service, shipping-service]
     env:
       SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
     steps:

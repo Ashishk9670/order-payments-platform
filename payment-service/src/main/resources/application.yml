@@ -67,6 +67,8 @@ psp:                                          # used when payment.gateway=http
   url: ${PSP_URL:http://localhost:9090}
   api-key: ${PSP_API_KEY:}                    # secret: provide via environment / secret store, never commit
   timeout-ms: ${PSP_TIMEOUT_MS:3000}
+  webhook-secret: ${PSP_WEBHOOK_SECRET:}      # shared HMAC secret for POST /webhooks/psp; empty = endpoint disabled (404)
+  webhook-tolerance: PT5M                     # signed timestamps older/newer than this are rejected (replay protection)
 
 security:
   # HS256 shared secret for local/dev/CI. In production leave it empty and set

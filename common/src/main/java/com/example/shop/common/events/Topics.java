@@ -14,12 +14,14 @@ public final class Topics {
     public static final String PAYMENT_REFUNDED = "payment.refunded.v1";
     public static final String PAYMENT_REFUND_FAILED = "payment.refund-failed.v1";
     public static final String INVENTORY_EXPIRED = "inventory.expired.v1";
+    public static final String SHIPMENT_SHIPPED = "shipment.shipped.v1";
+    public static final String SHIPMENT_DELIVERED = "shipment.delivered.v1";
 
     /** Every topic of the platform, for validation (for example: a replay may only target a known topic). */
     public static java.util.List<String> all() {
         return java.util.List.of(ORDER_CREATED, ORDER_CONFIRMED, ORDER_CANCELLED, INVENTORY_RESERVED, INVENTORY_FAILED,
                 PAYMENT_AUTHORIZED, PAYMENT_FAILED, ORDER_CANCELLATION_REQUESTED, PAYMENT_REFUNDED, PAYMENT_REFUND_FAILED,
-                INVENTORY_EXPIRED);
+                INVENTORY_EXPIRED, SHIPMENT_SHIPPED, SHIPMENT_DELIVERED);
     }
 
     private Topics() {

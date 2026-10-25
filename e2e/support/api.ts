@@ -5,6 +5,7 @@ export type Order = {
   id: string; customerId: string;
   status: 'PENDING' | 'INVENTORY_RESERVED' | 'CONFIRMED' | 'REFUND_PENDING' | 'CANCELLED';
   totalAmount: number; cancelReason: string | null; items: { sku: string; quantity: number; unitPrice: number }[];
+  fulfillment?: 'SHIPPED' | 'DELIVERED' | null; carrier?: string | null; trackingNumber?: string | null;
 };
 
 export const uid = (p: string) => `${p}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -33,8 +34,19 @@ export async function placeOrder(request: APIRequestContext, sku: string, quanti
   return request.post('/api/v1/orders', { headers, data: { customerId, items: [{ sku, quantity }] } });
 }
 
+/** A pooled keep-alive connection can be closed by the server between two polls; that is not a platform failure, so retry. */
+async function getWithRetry(request: APIRequestContext, url: string, attempts = 3) {
+  for (let i = 1; ; i++) {
+    try {
+      return await request.get(url);
+    } catch (e) {
+      if (i >= attempts || !/socket hang up|ECONNRESET/.test(String(e))) throw e;
+    }
+  }
+}
+
 export async function getOrder(request: APIRequestContext, id: string): Promise<Order> {
-  const r = await request.get(`/api/v1/orders/${id}`);
+  const r = await getWithRetry(request, `/api/v1/orders/${id}`);
   expect(r.ok()).toBeTruthy();
   return r.json();
 }

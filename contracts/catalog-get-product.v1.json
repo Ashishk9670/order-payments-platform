@@ -1,0 +1,33 @@
+{
+  "name": "catalog: price lookup by SKU",
+  "consumer": "order-service",
+  "provider": "catalog-service",
+  "note": "Both sides are tested against THIS file: the consumer replays `example` and must parse it; the provider's real response must satisfy `schema`. Change it deliberately and both test suites tell you who else must change.",
+  "interactions": [
+    {
+      "description": "a known SKU returns its name and unit price",
+      "request": { "method": "GET", "path": "/api/v1/products/CONTRACT-1" },
+      "providerState": { "sku": "CONTRACT-1", "name": "Contract widget", "price": 19.99 },
+      "response": {
+        "status": 200,
+        "contentType": "application/json",
+        "example": { "sku": "CONTRACT-1", "name": "Contract widget", "price": 19.99 },
+        "schema": {
+          "type": "object",
+          "required": ["sku", "name", "price"],
+          "properties": {
+            "sku": { "type": "string" },
+            "name": { "type": "string" },
+            "price": { "type": "number" }
+          }
+        }
+      }
+    },
+    {
+      "description": "an unknown SKU is a definite 404, which the consumer treats as 'no such product' rather than as an outage",
+      "request": { "method": "GET", "path": "/api/v1/products/NO-SUCH-SKU" },
+      "providerState": null,
+      "response": { "status": 404, "contentType": "application/problem+json" }
+    }
+  ]
+}

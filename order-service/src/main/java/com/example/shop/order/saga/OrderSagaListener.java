@@ -8,6 +8,8 @@ import com.example.shop.common.events.JsonEvents;
 import com.example.shop.common.events.OrderCancelled;
 import com.example.shop.common.events.OrderConfirmed;
 import com.example.shop.common.events.PaymentAuthorized;
+import com.example.shop.common.events.OrderDelivered;
+import com.example.shop.common.events.OrderShipped;
 import com.example.shop.common.events.PaymentFailed;
 import com.example.shop.common.events.PaymentRefundFailed;
 import com.example.shop.common.events.PaymentRefunded;
@@ -118,6 +120,21 @@ public class OrderSagaListener {
     public void onPaymentRefundFailed(String json) {
         var e = JsonEvents.read(mapper, json, PaymentRefundFailed.class);
         apply(e.eventId(), e.orderId(), Order::revertCancellation, null);
+    }
+
+    /** The shipping service handed the parcel to a carrier: from now on the order cannot be cancelled. */
+    @KafkaListener(topics = Topics.SHIPMENT_SHIPPED, groupId = GROUP)
+    @Transactional
+    public void onShipped(String json) {
+        var e = JsonEvents.read(mapper, json, OrderShipped.class);
+        apply(e.eventId(), e.orderId(), o -> o.markShipped(e.carrier(), e.trackingNumber()), null);
+    }
+
+    @KafkaListener(topics = Topics.SHIPMENT_DELIVERED, groupId = GROUP)
+    @Transactional
+    public void onDelivered(String json) {
+        var e = JsonEvents.read(mapper, json, OrderDelivered.class);
+        apply(e.eventId(), e.orderId(), Order::markDelivered, null);
     }
 
     private java.util.function.Consumer<Order> cancelled(String reason) {

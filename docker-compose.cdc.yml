@@ -10,3 +10,5 @@ services:
     <<: *cdc
   payment-service:
     <<: *cdc
+  shipping-service:
+    <<: *cdc

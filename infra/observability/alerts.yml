@@ -108,3 +108,21 @@ groups:
         annotations:
           summary: "{{ $labels.application }}: requests are waiting for a database connection"
           runbook: docs/runbooks/db-pool.md
+
+  - name: order-platform-fulfilment
+    rules:
+      - alert: ShipmentCancelledTooLate
+        expr: increase(shipments_cancel_too_late_total[1h]) > 0
+        labels: { severity: warning }
+        annotations:
+          summary: "A customer cancelled an order whose parcel had already been dispatched"
+          runbook: docs/runbooks/shipment-cancelled-too-late.md
+
+      - alert: PspWebhooksRejected
+        expr: sum(increase(psp_webhooks_rejected_total[15m])) > 10
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "Many payment webhooks failed signature verification (wrong secret, clock skew, or someone probing)"
+          runbook: docs/runbooks/webhooks-rejected.md
+

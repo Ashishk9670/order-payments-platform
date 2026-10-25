@@ -24,6 +24,8 @@ services:
     environment: *keycloak-resource-server
   payment-service:
     environment: *keycloak-resource-server
+  shipping-service:
+    environment: *keycloak-resource-server
   catalog-service:
     environment: *keycloak-resource-server
   notification-service:

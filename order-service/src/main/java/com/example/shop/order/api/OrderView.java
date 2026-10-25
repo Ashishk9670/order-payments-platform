@@ -1,5 +1,6 @@
 package com.example.shop.order.api;
 
+import com.example.shop.order.domain.Fulfillment;
 import com.example.shop.order.domain.Order;
 import com.example.shop.order.domain.OrderStatus;
 import java.io.Serializable;
@@ -10,7 +11,8 @@ import java.util.UUID;
 
 /** Read model returned by REST. Serializable because it is cached in Redis. */
 public record OrderView(UUID id, String customerId, OrderStatus status, BigDecimal totalAmount, String cancelReason,
-                        Instant createdAt, List<ItemView> items) implements Serializable {
+                        Instant createdAt, List<ItemView> items, Fulfillment fulfillment, String carrier,
+                        String trackingNumber) implements Serializable {
 
     public record ItemView(String sku, int quantity, BigDecimal unitPrice) implements Serializable {
     }
@@ -18,6 +20,7 @@ public record OrderView(UUID id, String customerId, OrderStatus status, BigDecim
     public static OrderView from(Order o) {
         return new OrderView(o.getId(), o.getCustomerId(), o.getStatus(), o.getTotalAmount(), o.getCancelReason(),
                 o.getCreatedAt(),
-                o.getItems().stream().map(i -> new ItemView(i.getSku(), i.getQuantity(), i.getUnitPrice())).toList());
+                o.getItems().stream().map(i -> new ItemView(i.getSku(), i.getQuantity(), i.getUnitPrice())).toList(),
+                o.getFulfillment(), o.getCarrier(), o.getTrackingNumber());
     }
 }

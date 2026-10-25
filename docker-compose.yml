@@ -95,6 +95,19 @@ services:
       DB_URL: jdbc:postgresql://postgres:5432/payments?connectTimeout=3&socketTimeout=15
       PAYMENT_GATEWAY: ${PAYMENT_GATEWAY:-simulated}      # simulated | http (then PSP_URL below is used)
       PSP_URL: ${PSP_URL:-http://psp-mock:8080}
+      PSP_WEBHOOK_SECRET: ${PSP_WEBHOOK_SECRET:-dev-only-webhook-secret}   # DEV/CI ONLY
+      KAFKA_BOOTSTRAP: kafka:19092
+    depends_on: *infra
+
+  shipping-service:
+    profiles: [apps]
+    build: { context: ., args: { MODULE: shipping-service } }
+    ports: ["8086:8086"]
+    environment:
+      JWT_SECRET: ${JWT_SECRET:-dev-only-secret-dev-only-secret-0123456789}   # DEV/CI ONLY
+      TRACING_SAMPLING: ${TRACING_SAMPLING:-0.0}      # tracing is off unless the observability profile is used (see below)
+      OTLP_TRACING_ENDPOINT: http://jaeger:4318/v1/traces
+      DB_URL: jdbc:postgresql://postgres:5432/shipping?connectTimeout=3&socketTimeout=15
       KAFKA_BOOTSTRAP: kafka:19092
     depends_on: *infra
 

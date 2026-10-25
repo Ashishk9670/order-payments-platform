@@ -132,4 +132,45 @@ class OrderTest {
         order.confirm();
         return order;
     }
+
+    // ---- fulfillment ---------------------------------------------------------------------------------------------------
+
+    @Test
+    void onlyAConfirmedOrderShipsAndThenDelivers() {
+        var pending = newOrder();
+        assertThat(pending.markShipped("DHL", "T1")).as("not confirmed yet").isFalse();
+        assertThat(pending.getFulfillment()).isNull();
+
+        var order = confirmed();
+        assertThat(order.markDelivered()).as("cannot deliver what was never shipped").isFalse();
+        assertThat(order.markShipped("DHL", "T1")).isTrue();
+        assertThat(order.getFulfillment()).isEqualTo(Fulfillment.SHIPPED);
+        assertThat(order.getCarrier()).isEqualTo("DHL");
+        assertThat(order.getTrackingNumber()).isEqualTo("T1");
+        assertThat(order.markShipped("UPS", "T2")).as("a repeated event changes nothing").isFalse();
+        assertThat(order.getCarrier()).isEqualTo("DHL");
+
+        assertThat(order.markDelivered()).isTrue();
+        assertThat(order.getFulfillment()).isEqualTo(Fulfillment.DELIVERED);
+        assertThat(order.markDelivered()).isFalse();
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.CONFIRMED);   // fulfillment does not change the order status
+    }
+
+    @Test
+    void aShippedOrderCanNoLongerBeCancelled() {
+        var order = confirmed();
+        order.markShipped("DHL", "T1");
+
+        assertThat(order.requestCancellation("too late")).isFalse();
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.CONFIRMED);
+    }
+
+    @Test
+    void aShipmentEventForACancellingOrderIsIgnored() {
+        var order = confirmed();
+        order.requestCancellation("changed my mind");
+
+        assertThat(order.markShipped("DHL", "T1")).isFalse();   // the refund is already under way
+        assertThat(order.getFulfillment()).isNull();
+    }
 }

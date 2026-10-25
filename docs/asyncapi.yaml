@@ -1,7 +1,7 @@
 asyncapi: 3.0.0
 info:
   title: Order Platform events
-  version: 1.2.0
+  version: 1.3.0
   description: >
     Kafka event contracts for the order saga. Every message is JSON, keyed by orderId (so all events of one order
     are ordered within a partition), and carries a unique eventId used by consumers for idempotency.
@@ -46,6 +46,12 @@ channels:
   inventoryExpired:
     address: inventory.expired.v1
     messages: { InventoryExpired: { $ref: '#/components/messages/InventoryExpired' } }
+  shipmentShipped:
+    address: shipment.shipped.v1
+    messages: { OrderShipped: { $ref: '#/components/messages/OrderShipped' } }
+  shipmentDelivered:
+    address: shipment.delivered.v1
+    messages: { OrderDelivered: { $ref: '#/components/messages/OrderDelivered' } }
 
 operations:
   order-service.publishOrderCreated:   { action: send,    channel: { $ref: '#/channels/orderCreated' } }
@@ -74,6 +80,12 @@ operations:
   inventory-service.publishExpired:    { action: send,    channel: { $ref: '#/channels/inventoryExpired' } }
   order-service.onInventoryExpired:    { action: receive, channel: { $ref: '#/channels/inventoryExpired' } }
   inventory-service.onPaymentAuthorized: { action: receive, channel: { $ref: '#/channels/paymentAuthorized' } }
+  shipping-service.onOrderConfirmed:   { action: receive, channel: { $ref: '#/channels/orderConfirmed' } }
+  shipping-service.onCancellationRequested: { action: receive, channel: { $ref: '#/channels/orderCancellationRequested' } }
+  shipping-service.publishShipped:     { action: send,    channel: { $ref: '#/channels/shipmentShipped' } }
+  order-service.onShipped:             { action: receive, channel: { $ref: '#/channels/shipmentShipped' } }
+  shipping-service.publishDelivered:   { action: send,    channel: { $ref: '#/channels/shipmentDelivered' } }
+  order-service.onDelivered:           { action: receive, channel: { $ref: '#/channels/shipmentDelivered' } }
 
 components:
   messages:
@@ -184,4 +196,22 @@ components:
           eventId: { type: string, format: uuid }
           orderId: { type: string, format: uuid }
           reason: { type: string }
+          occurredAt: { type: string, format: date-time }
+    OrderShipped:
+      payload:
+        type: object
+        required: [eventId, orderId, carrier, trackingNumber, occurredAt]
+        properties:
+          eventId: { type: string, format: uuid }
+          orderId: { type: string, format: uuid }
+          carrier: { type: string }
+          trackingNumber: { type: string }
+          occurredAt: { type: string, format: date-time }
+    OrderDelivered:
+      payload:
+        type: object
+        required: [eventId, orderId, occurredAt]
+        properties:
+          eventId: { type: string, format: uuid }
+          orderId: { type: string, format: uuid }
           occurredAt: { type: string, format: date-time }

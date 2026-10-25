@@ -45,6 +45,8 @@ payment:
     url: ""
     existingSecret: ""                     # Secret holding the processor API key
     apiKeyKey: api-key
+    webhookExistingSecret: ""            # Secret holding the HMAC secret for POST /webhooks/psp; empty = endpoint disabled (404)
+    webhookSecretKey: webhook-secret
 
 rateLimit:
   orderServicePerIpPerMinute: 120          # per client IP, enforced in the order service (429 + Retry-After)
@@ -102,6 +104,12 @@ services:
     replicas: 2
     database: catalog
     resources: { requests: { cpu: 100m, memory: 384Mi }, limits: { memory: 512Mi } }
+    autoscaling: { enabled: false }
+  shipping-service:
+    port: 8086
+    replicas: 2
+    database: shipping
+    resources: { requests: { cpu: 100m, memory: 384Mi }, limits: { memory: 640Mi } }
     autoscaling: { enabled: false }
   notification-service:
     port: 8084
