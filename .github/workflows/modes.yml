@@ -33,10 +33,10 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Start the stack with the HTTP payment adapter
         run: PAYMENT_GATEWAY=http docker compose --profile apps --profile psp up --build -d
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with: { node-version: 22, cache: npm, cache-dependency-path: e2e/package-lock.json }
       - run: npm ci
         working-directory: e2e
@@ -46,7 +46,7 @@ jobs:
         run: E2E_PSP=1 npx playwright test --project=psp
       - name: Upload report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with: { name: psp-report, path: "e2e/playwright-report/\ne2e/test-results/" }
       - if: failure()
         run: docker compose --profile apps --profile psp logs --no-color --tail=200
@@ -58,10 +58,10 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Start the stack validating Keycloak tokens (dev token endpoint off)
         run: docker compose -f docker-compose.yml -f docker-compose.keycloak.yml --profile apps --profile keycloak up --build -d
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with: { node-version: 22, cache: npm, cache-dependency-path: e2e/package-lock.json }
       - run: npm ci
         working-directory: e2e
@@ -78,7 +78,7 @@ jobs:
         run: E2E_KEYCLOAK=1 npx playwright test --project=keycloak
       - name: Upload report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with: { name: keycloak-report, path: "e2e/playwright-report/\ne2e/test-results/" }
       - if: failure()
         run: docker compose -f docker-compose.yml -f docker-compose.keycloak.yml --profile apps --profile keycloak logs --no-color --tail=200
@@ -90,10 +90,10 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Start the stack with the relay off and CDC on
         run: docker compose -f docker-compose.yml -f docker-compose.cdc.yml --profile apps --profile cdc up --build -d
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with: { node-version: 22, cache: npm, cache-dependency-path: e2e/package-lock.json }
       - run: npm ci
         working-directory: e2e
@@ -119,7 +119,7 @@ jobs:
           done
       - name: Upload report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with: { name: cdc-report, path: "e2e/playwright-report/\ne2e/test-results/" }
       - if: failure()
         run: docker compose -f docker-compose.yml -f docker-compose.cdc.yml --profile apps --profile cdc logs --no-color --tail=200
@@ -131,10 +131,10 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Start the standard stack
         run: docker compose --profile apps up --build -d
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with: { node-version: 22, cache: npm, cache-dependency-path: e2e/package-lock.json }
       - run: npm ci
         working-directory: e2e
@@ -144,7 +144,7 @@ jobs:
         run: E2E_CHAOS=1 npx playwright test --project=chaos
       - name: Upload report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with: { name: chaos-report, path: "e2e/playwright-report/\ne2e/test-results/" }
       - if: failure()
         run: docker compose --profile apps logs --no-color --tail=200
